@@ -1,6 +1,6 @@
 import { Component, inject, signal, viewChild } from '@angular/core';
 import { ClrDatagridModule } from '@clr/angular/data/datagrid';
-import { ClrIconModule } from '@clr/angular/icon';
+import { ClrIcon } from '@clr/angular/icon';
 
 import { Api, Job, Service, errorMessage } from '../shared/api';
 import { ConfirmDialog } from '../shared/confirm-dialog';
@@ -9,7 +9,7 @@ import { JobPanel } from '../shared/job-panel';
 
 @Component({
   selector: 'lj-services',
-  imports: [ClrDatagridModule, ClrIconModule, ConfirmDialog, JobPanel],
+  imports: [ClrDatagridModule, ClrIcon, ConfirmDialog, JobPanel],
   template: `
     <h1>Services</h1>
     @if (!available()) {

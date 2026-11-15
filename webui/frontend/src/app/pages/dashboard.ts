@@ -1,6 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { ClrDatagridModule } from '@clr/angular/data/datagrid';
-import { ClrIconModule } from '@clr/angular/icon';
+import { ClrIcon } from '@clr/angular/icon';
 
 import { Adblock, Api, Disk, Service, Stats } from '../shared/api';
 import { AgoPipe, BytesPipe, percent } from '../shared/format';
@@ -9,7 +9,7 @@ import { TrafficChart } from '../shared/traffic-chart';
 
 @Component({
   selector: 'lj-dashboard',
-  imports: [ClrDatagridModule, ClrIconModule, BytesPipe, AgoPipe, TrafficChart],
+  imports: [ClrDatagridModule, ClrIcon, BytesPipe, AgoPipe, TrafficChart],
   template: `
     <h1>Dashboard</h1>
     @if (error()) {
@@ -85,7 +85,7 @@ import { TrafficChart } from '../shared/traffic-chart';
           <ul class="lj-health">
             @for (svc of services(); track svc.id) {
               <li>
-                <cds-icon [attr.shape]="healthIcon(svc)" [attr.status]="healthStatus(svc)" aria-hidden="true"></cds-icon>
+                <cds-icon [shape]="healthIcon(svc)" [status]="healthStatus(svc)" aria-hidden="true"></cds-icon>
                 <strong>{{ svc.service }}</strong>
                 <span>{{ svc.health ?? svc.state }}</span>
               </li>

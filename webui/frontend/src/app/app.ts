@@ -1,6 +1,6 @@
 import { Component, computed, inject } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { ClrIconModule } from '@clr/angular/icon';
+import { ClrIcon } from '@clr/angular/icon';
 import { ClrMainContainerModule } from '@clr/angular/layout/main-container';
 import { ClrNavigationModule } from '@clr/angular/layout/nav';
 import { ClrVerticalNavModule } from '@clr/angular/layout/vertical-nav';
@@ -10,7 +10,7 @@ import { ThemeService } from './shared/theme';
 
 @Component({
   selector: 'lj-root',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, ClrMainContainerModule, ClrNavigationModule, ClrVerticalNavModule, ClrIconModule],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, ClrMainContainerModule, ClrNavigationModule, ClrVerticalNavModule, ClrIcon],
   template: `
     <clr-main-container>
       <clr-header class="header-6">
@@ -23,7 +23,7 @@ import { ThemeService } from './shared/theme';
         <div class="header-actions">
           <button type="button" class="nav-link nav-icon lj-header-btn" (click)="theme.toggle()"
                   [attr.aria-label]="theme.theme() === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'">
-            <cds-icon [attr.shape]="theme.theme() === 'dark' ? 'sun' : 'moon'" aria-hidden="true"></cds-icon>
+            <cds-icon [shape]="theme.theme() === 'dark' ? 'sun' : 'moon'" aria-hidden="true"></cds-icon>
           </button>
           @if (session()?.signedIn) {
             <button type="button" class="nav-link nav-icon lj-header-btn" (click)="logout()" aria-label="Sign out">

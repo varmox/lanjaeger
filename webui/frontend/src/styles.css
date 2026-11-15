@@ -30,7 +30,8 @@ h1 { margin-top: 0; }
   letter-spacing: 0.06em;
   font-size: 0.75rem;
 }
-.lj-kpi {
+/* .card .lj-kpi: beat Clarity's card paragraph styles. */
+.card .lj-kpi, .lj-kpi {
   margin: 0.25rem 0;
   font-size: 2rem;
   line-height: 1.1;
@@ -144,3 +145,6 @@ dialog::backdrop {
   position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden;
   clip-path: inset(50%); white-space: nowrap;
 }
+
+/* Space between Clarity's toggle switch and its label. */
+.clr-toggle-wrapper label { padding-inline-start: 0.5rem; }

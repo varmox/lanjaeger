@@ -1,6 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ClrIconModule } from '@clr/angular/icon';
+import { ClrIcon } from '@clr/angular/icon';
 
 import { AlertSettings, Alerts, Api, SECRET_PLACEHOLDER, errorMessage } from '../shared/api';
 import { AgoPipe } from '../shared/format';
@@ -8,7 +8,7 @@ import { poll } from '../shared/poll';
 
 @Component({
   selector: 'lj-alerts',
-  imports: [FormsModule, ClrIconModule, AgoPipe],
+  imports: [FormsModule, ClrIcon, AgoPipe],
   template: `
     <h1>Alerts</h1>
     <p>Get a message when the cache disk fills up, a service goes down, a prefill fails or the ad blocklist is empty —
@@ -142,7 +142,7 @@ import { poll } from '../shared/poll';
           <ul class="lj-test-results" aria-label="Test results">
             @for (k of keys(r); track k) {
               <li>
-                <cds-icon [attr.shape]="r[k] === 'ok' ? 'check-circle' : 'times-circle'" [attr.status]="r[k] === 'ok' ? 'success' : 'danger'" aria-hidden="true"></cds-icon>
+                <cds-icon [shape]="r[k] === 'ok' ? 'check-circle' : 'times-circle'" [status]="r[k] === 'ok' ? 'success' : 'danger'" aria-hidden="true"></cds-icon>
                 <strong>{{ k }}</strong>: {{ r[k] === 'ok' ? 'sent' : r[k] }}
               </li>
             }

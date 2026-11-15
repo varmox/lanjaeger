@@ -30,8 +30,8 @@ from .jobs import MANAGED, JobRunner
 from .stats import LogFollower, Stats
 
 # Steam capsule images come from Steam's CDN (prefill game picker).
-CSP = ("default-src 'self'; img-src 'self' data: https://cdn.akamai.steamstatic.com; style-src 'self' 'unsafe-inline'; "
-       "script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+CSP = ("default-src 'self'; img-src 'self' data: https://cdn.akamai.steamstatic.com; font-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+       "script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
 MAX_BODY = 64 * 1024
 
 

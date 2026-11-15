@@ -1,6 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ClrIconModule } from '@clr/angular/icon';
+import { ClrIcon } from '@clr/angular/icon';
 
 import { Api, EpicLibrary, LoginService, Prefill, PrefillSettings, SteamGame, errorMessage } from '../shared/api';
 import { LoginRelay } from '../shared/login-relay';
@@ -8,7 +8,7 @@ import { poll } from '../shared/poll';
 
 @Component({
   selector: 'lj-prefill',
-  imports: [FormsModule, ClrIconModule, LoginRelay],
+  imports: [FormsModule, ClrIcon, LoginRelay],
   template: `
     <h1>Prefill</h1>
     <p>Download games into the cache ahead of time — for example the night before a LAN party — so even the first
@@ -114,7 +114,7 @@ import { poll } from '../shared/poll';
                       <span>{{ settings.steam.games[id] }}</span>
                       <button type="button" class="btn btn-sm btn-link" (click)="remove(id)"
                               [attr.aria-label]="'Remove ' + settings.steam.games[id]">
-                        <cds-icon shape="trash" aria-hidden="true"></cds-icon>
+                        <cds-icon shape="trash" aria-hidden="true"></cds-icon> Remove
                       </button>
                     </li>
                   }

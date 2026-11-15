@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ClrDatagridModule } from '@clr/angular/data/datagrid';
-import { ClrIconModule } from '@clr/angular/icon';
+import { ClrIcon } from '@clr/angular/icon';
 
 import { Adblock, Api, errorMessage } from '../shared/api';
 import { percent } from '../shared/format';
@@ -12,7 +12,7 @@ type ListKind = 'allow' | 'deny';
 
 @Component({
   selector: 'lj-adblock',
-  imports: [FormsModule, ClrDatagridModule, ClrIconModule],
+  imports: [FormsModule, ClrDatagridModule, ClrIcon],
   template: `
     <h1>Ad blocking</h1>
     <p>Every device using this cache's DNS gets ads, trackers and malware domains blocked — no app needed.</p>
@@ -32,8 +32,8 @@ type ListKind = 'allow' | 'deny';
             <div class="card-block">
               <p class="card-text lj-kpi-label">Status</p>
               <p class="lj-kpi">
-                <cds-icon [attr.shape]="d.active ? 'shield-check' : 'shield'" size="lg"
-                          [attr.status]="d.active ? 'success' : 'warning'" aria-hidden="true"></cds-icon>
+                <cds-icon [shape]="d.active ? 'shield-check' : 'shield'" size="lg"
+                          [status]="d.active ? 'success' : 'warning'" aria-hidden="true"></cds-icon>
                 {{ d.active ? 'Blocking' : (d.pausedForSeconds ? 'Paused' : 'Off') }}
               </p>
               <p class="card-text">
