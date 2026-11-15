@@ -111,7 +111,9 @@ dialog::backdrop {
   gap: 0 2rem;
 }
 .lj-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 2rem; }
-.lj-list { inline-size: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; field-sizing: content; min-block-size: 8lh; }
+/* Full-width list editors; Clarity's control container is inline by default. */
+.lj-two-col .clr-control-container, .lj-two-col .clr-form-control { inline-size: 100%; max-inline-size: none; }
+.lj-list { inline-size: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; resize: vertical; }
 .lj-kpi cds-icon { vertical-align: -0.15em; }
 
 /* Prefill page */
