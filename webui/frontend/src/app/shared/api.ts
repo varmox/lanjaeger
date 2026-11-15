@@ -277,7 +277,8 @@ export class Api {
     return firstValueFrom(this.http.post(`/api/prefill/${service}/login/input`, { text, secret }));
   }
 
-  logout(service: LoginService) {
+  /** Log a prefill tool out of Steam/Epic (not the web UI session). */
+  serviceLogout(service: LoginService) {
     return firstValueFrom(this.http.post(`/api/prefill/${service}/logout`, {}));
   }
 

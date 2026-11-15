@@ -409,6 +409,6 @@ export class PrefillPage {
   }
 
   protected logout(service: LoginService) {
-    return this.act(() => this.api.logout(service), `Logged out of ${this.label(service)}.`);
+    return this.act(() => this.api.serviceLogout(service), `Logged out of ${this.label(service)}.`);
   }
 }
