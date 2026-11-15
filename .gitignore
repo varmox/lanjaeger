@@ -1,0 +1,5 @@
+# Your settings
+.env
+
+# Default cache location (CACHE_ROOT=./lancache)
+lancache/

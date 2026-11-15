@@ -1,0 +1,45 @@
+# lanjaeger — a lancache stack (DNS + monolithic cache + log rotation).
+# All settings live in .env (copy .env.example). Nothing in this file
+# should need editing.
+
+x-common: &common
+  env_file: .env
+  restart: ${RESTART_POLICY:-no}
+
+services:
+  dns:
+    <<: *common
+    image: ${DNS_IMAGE:-lancachenet/lancache-dns:latest}
+    ports:
+      - ${DNS_BIND_IP:?set DNS_BIND_IP in .env}:53:53/udp
+      - ${DNS_BIND_IP}:53:53/tcp
+    healthcheck:
+      # A cached domain must resolve, or clients silently bypass the cache.
+      test: ["CMD-SHELL", "dig +short +time=2 +tries=1 @127.0.0.1 lancache.steamcontent.com | grep -q ."]
+      interval: 1m
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  monolithic:
+    <<: *common
+    image: ${MONOLITHIC_IMAGE:-lancachenet/monolithic:latest}
+    # The image ships its own healthcheck (GET /lancache-heartbeat).
+    ports:
+      - ${CACHE_BIND_IP:-0.0.0.0}:80:80/tcp
+      - ${CACHE_BIND_IP:-0.0.0.0}:443:443/tcp
+    volumes:
+      - ${CACHE_ROOT:?set CACHE_ROOT in .env}/cache:/data/cache
+      - ${CACHE_ROOT}/logs:/data/logs
+
+  # nginx writes one ever-growing access.log; the image's LOGFILE_RETENTION
+  # only deletes whole files by age at container start, so it never rotates.
+  # This rotates by size (copy + truncate, no nginx restart needed).
+  logrotate:
+    image: ${LOGROTATE_IMAGE:-busybox:1.36}
+    restart: ${RESTART_POLICY:-no}
+    env_file: .env
+    command: ["sh", "/rotate-logs.sh"]
+    volumes:
+      - ${CACHE_ROOT}/logs:/logs
+      - ./scripts/rotate-logs.sh:/rotate-logs.sh:ro

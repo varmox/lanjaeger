@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Shell scripts
+        run: shellcheck update.sh scripts/rotate-logs.sh
+
+      - name: Compose file
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
+
+      - name: Log rotation
+        run: |
+          mkdir -p /tmp/logs
+          head -c 3145728 /dev/zero > /tmp/logs/access.log   # 3 MB
+          docker run --rm -v /tmp/logs:/logs -v "$PWD/scripts/rotate-logs.sh:/r.sh:ro" \
+            -e LOG_MAX_SIZE_MB=1 -e LOG_KEEP=2 busybox:1.36 \
+            sh -c 'timeout 5 sh /r.sh || true'
+          test "$(stat -c %s /tmp/logs/access.log)" -eq 0
+          test -f /tmp/logs/access.log.1.gz
