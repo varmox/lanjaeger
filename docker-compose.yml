@@ -1,18 +1,36 @@
-# lanjaeger — a lancache stack (DNS + monolithic cache + log rotation).
-# All settings live in .env (copy .env.example). Nothing in this file
-# should need editing.
+# lanjaeger — a lancache stack: ad-blocking DNS, cache DNS, monolithic cache,
+# log rotation, optional web UI. All settings live in .env (copy
+# .env.example). Nothing in this file should need editing.
+#
+#   clients ──► blocky :53 ──► dns (lancache-dns) ──► UPSTREAM_DNS
+#   clients ──► monolithic :80/:443 (game downloads, redirected by dns)
 
 x-common: &common
   env_file: .env
   restart: ${RESTART_POLICY:-no}
 
 services:
-  dns:
-    <<: *common
-    image: ${DNS_IMAGE:-lancachenet/lancache-dns:latest}
+  # The DNS server clients use: ad/tracker blocking and DNS caching, then
+  # everything goes to lancache-dns. See blocky/config.yml.
+  blocky:
+    image: ${BLOCKY_IMAGE:-ghcr.io/0xerr0r/blocky:v0.35.0}
+    restart: ${RESTART_POLICY:-no}
+    environment:
+      TZ: ${TZ:-UTC}
     ports:
       - ${DNS_BIND_IP:?set DNS_BIND_IP in .env}:53:53/udp
       - ${DNS_BIND_IP}:53:53/tcp
+    volumes:
+      - ./blocky/config.yml:/app/config.yml:ro
+      - ./blocky/allowlist.txt:/app/lists/allowlist.txt:ro
+      - ./blocky/denylist.txt:/app/lists/denylist.txt:ro
+    depends_on:
+      - dns
+
+  # Answers game-CDN names with LANCACHE_IP. Only reachable through blocky.
+  dns:
+    <<: *common
+    image: ${DNS_IMAGE:-lancachenet/lancache-dns:latest}
     healthcheck:
       # A cached domain must resolve, or clients silently bypass the cache.
       test: ["CMD-SHELL", "dig +short +time=2 +tries=1 @127.0.0.1 lancache.steamcontent.com | grep -q ."]
@@ -43,3 +61,28 @@ services:
     volumes:
       - ${CACHE_ROOT}/logs:/logs
       - ./scripts/rotate-logs.sh:/rotate-logs.sh:ro
+
+  # Optional web UI (dashboard + controls). Enable with COMPOSE_PROFILES=webui
+  # in .env. It mounts the Docker socket — root-equivalent on this host — so
+  # it's opt-in, password-protected, and meant for your LAN only.
+  webui:
+    profiles: [webui]
+    build: ./webui
+    image: lanjaeger-webui:local
+    restart: ${RESTART_POLICY:-no}
+    environment:
+      WEBUI_PASSWORD: ${WEBUI_PASSWORD:-}
+      WEBUI_PUBLIC_DASHBOARD: ${WEBUI_PUBLIC_DASHBOARD:-false}
+      # The project folder is mounted at its own host path so `docker compose`
+      # inside the container resolves relative paths exactly like on the host.
+      PROJECT_DIR: ${PWD}
+      TZ: ${TZ:-UTC}
+    ports:
+      - ${WEBUI_BIND_IP:-0.0.0.0}:${WEBUI_PORT:-8080}:8080
+    volumes:
+      - ${CACHE_ROOT}/logs:/data/logs:ro
+      - ${CACHE_ROOT}/cache:/data/cache:ro
+      - ${PWD}:${PWD}
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - blocky

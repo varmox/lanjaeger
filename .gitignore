@@ -3,3 +3,15 @@
 
 # Default cache location (CACHE_ROOT=./lancache)
 lancache/
+
+# Prefill state: Steam login token, selections, prefill progress
+prefill/
+
+# Alert settings (contain webhook URLs / SMTP password) and history
+alerts/
+
+# Frontend build output
+webui/frontend/node_modules/
+webui/frontend/dist/
+webui/frontend/.angular/
+**/__pycache__/

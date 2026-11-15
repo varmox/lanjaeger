@@ -1,0 +1,3 @@
+# Domains that must never be blocked, one per line (subdomains included).
+# Also editable in the web UI (Ad blocking → Allowlist). Changes apply
+# within a minute when made in the UI, or after `docker compose restart blocky`.

@@ -1,0 +1,146 @@
+/* App styles on top of Clarity (clr-ui.css). Colours come from Clarity's
+   --cds-* tokens so light and dark themes (cds-theme on <body>) just work. */
+
+:root {
+  color-scheme: light dark;
+  accent-color: var(--cds-alias-status-info, #0072a3);
+}
+
+main.content-area {
+  container-type: inline-size;
+}
+
+h1 { margin-top: 0; }
+
+.lj-section { margin-block-start: 2rem; }
+.lj-muted { color: var(--cds-alias-typography-color-300, #6b6b6b); }
+.lj-status:empty, .lj-error:empty, .lj-field-error:empty { display: none; }
+.lj-error, .lj-field-error { color: var(--cds-alias-status-danger, #c21d00); }
+
+/* KPI cards: as many columns as fit. */
+.lj-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 1rem;
+}
+.lj-cards .card { margin-top: 0; }
+.lj-kpi-label {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.75rem;
+}
+.lj-kpi {
+  margin: 0.25rem 0;
+  font-size: 2rem;
+  line-height: 1.1;
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Native <progress> with accent-color only — no box styling, so the
+   platform rendering (and its accessibility) stays intact. */
+.lj-progress { inline-size: 100%; }
+
+/* Traffic chart */
+.lj-chart { margin: 0; }
+.lj-chart svg { display: block; inline-size: 100%; block-size: 10rem; }
+.lj-chart .hit { fill: var(--cds-alias-status-success, #3c8500); }
+.lj-chart .miss { fill: var(--cds-alias-status-info, #0072a3); opacity: 0.55; }
+.lj-chart figcaption { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; margin-top: 0.5rem; }
+.lj-key::before {
+  content: "";
+  display: inline-block;
+  inline-size: 0.75rem;
+  block-size: 0.75rem;
+  margin-inline-end: 0.35rem;
+  vertical-align: -1px;
+}
+.lj-key.hit::before { background: var(--cds-alias-status-success, #3c8500); }
+.lj-key.miss::before { background: var(--cds-alias-status-info, #0072a3); opacity: 0.55; }
+.lj-summary { flex-basis: 100%; color: var(--cds-alias-typography-color-300, #6b6b6b); }
+
+.lj-health { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 0.5rem 2rem; }
+.lj-health li { display: flex; align-items: center; gap: 0.5rem; }
+
+.lj-pre {
+  max-block-size: 24rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-size: 0.75rem;
+}
+.lj-job { margin-top: 1rem; }
+
+/* Sign-in: inputs and button at the top, so a mobile keyboard never covers them. */
+.lj-login { max-inline-size: 24rem; margin: 2rem auto; }
+.lj-login .btn-block { margin-top: 1.5rem; }
+
+.lj-fieldset { border: 0; padding: 0; margin: 0 0 1.5rem; }
+.lj-fieldset legend { font-size: 1.1rem; font-weight: 500; padding: 0; margin-bottom: 0.5rem; }
+.lj-wide { inline-size: min(28rem, 70vw); }
+
+.lj-header-btn { background: none; border: 0; cursor: pointer; color: inherit; }
+
+/* Native <dialog> with Clarity's modal look. */
+.lj-dialog {
+  border: 0;
+  padding: 0;
+  max-inline-size: min(36rem, calc(100vw - 2rem));
+  background: transparent;
+}
+.lj-dialog .modal-content { padding: 1.5rem; }
+.lj-dialog .modal-footer { gap: 0.5rem; }
+/* Both rules are needed so scrolling over the backdrop doesn't scroll the page. */
+dialog:modal { overscroll-behavior: contain; }
+dialog::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background: rgb(0 0 0 / 0.5);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .lj-chart rect { transition: height 0.3s, y 0.3s; }
+}
+
+/* Ad blocking page */
+.lj-two-col {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+  gap: 0 2rem;
+}
+.lj-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 2rem; }
+.lj-list { inline-size: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; field-sizing: content; min-block-size: 8lh; }
+.lj-kpi cds-icon { vertical-align: -0.15em; }
+
+/* Prefill page */
+.lj-card-section { margin-top: 1.5rem; }
+.lj-schedule { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1rem; margin-top: 1.5rem; }
+.lj-inline-field { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.5rem; }
+.lj-inline-field input { inline-size: 5rem; }
+.lj-results, .lj-selected { list-style: none; padding: 0; margin: 0.75rem 0; }
+.lj-results li, .lj-selected li {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.35rem 0; border-bottom: 1px solid var(--cds-alias-object-border-color, #ccc);
+}
+.lj-results li span, .lj-selected li span { flex: 1; }
+.lj-results img { inline-size: 120px; block-size: 45px; object-fit: cover; }
+.lj-subhead { font-size: 1rem; margin: 1rem 0 0.25rem; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.lj-checkgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr)); gap: 0.25rem 1rem; }
+.lj-terminal { margin: 1rem 0; }
+.lj-terminal .lj-pre { max-block-size: 16rem; }
+.lj-term-input { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.5rem; }
+.lj-term-input label { font-weight: 500; }
+
+.lj-scrollbox { max-block-size: 20rem; overflow: auto; padding-block: 0.25rem; }
+
+/* Alerts page */
+.lj-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: 0.5rem 1.5rem; }
+.lj-grid-2 > div { display: flex; flex-direction: column; gap: 0.25rem; }
+.lj-indent { margin-inline-start: 1.75rem; }
+.lj-actions { margin-top: 1.5rem; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.lj-test-results { list-style: none; padding: 0; }
+.lj-visually-hidden {
+  position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
+}

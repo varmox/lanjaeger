@@ -1,0 +1,69 @@
+# Blocky — the DNS server your clients talk to (on DNS_BIND_IP:53).
+#
+#   clients ──► blocky (ad blocking, caching) ──► lancache-dns (cache redirects) ──► UPSTREAM_DNS
+#
+# Edit your own lists in allowlist.txt / denylist.txt next to this file (or
+# from the web UI). Reference: https://0xerr0r.github.io/blocky/v0.35/configuration/
+
+upstreams:
+  groups:
+    default:
+      - dns            # the lancache-dns container on the compose network
+  timeout: 5s
+  init:
+    strategy: fast     # start even if lancache-dns isn't ready yet
+
+ports:
+  dns: 53
+  # API, metrics and stats. NOT published on the host: the API has no
+  # authentication. Only the web UI talks to it, over the compose network.
+  http: 4000
+
+blocking:
+  denylists:
+    ads:
+      # Steven Black's unified hosts: ads + malware, conservative, widely used.
+      - https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts
+      - /app/lists/denylist.txt
+    # Canary domains: answering NXDOMAIN makes Firefox skip its built-in
+    # DNS-over-HTTPS and iCloud Private Relay stand down, so those devices keep
+    # using this DNS — and therefore the cache and the ad blocker.
+    canaries:
+      - |
+        use-application-dns.net
+        mask.icloud.com
+        mask-h2.icloud.com
+  allowlists:
+    ads:
+      - /app/lists/allowlist.txt
+  clientGroupsBlock:
+    default:
+      - ads
+      - canaries
+  # NXDOMAIN (not 0.0.0.0): the canary checks need it, and apps fail fast.
+  blockType: nxDomain
+  blockTTL: 1m
+  loading:
+    refreshPeriod: 24h
+    strategy: fast     # serve DNS immediately, load lists in the background
+    downloads:
+      timeout: 60s
+      attempts: 5
+      cooldown: 10s
+
+# Must stay off: lancache works by answering game CDN names with your LAN IP,
+# which rebinding protection would drop as a "private answer".
+rebindingProtection:
+  enable: false
+
+caching:
+  prefetching: true
+
+statistics:
+  enable: true
+
+prometheus:
+  enable: true
+
+log:
+  level: info

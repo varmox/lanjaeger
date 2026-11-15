@@ -1,0 +1,2 @@
+# Extra domains to block, one per line (subdomains included).
+# Also editable in the web UI (Ad blocking → Denylist).

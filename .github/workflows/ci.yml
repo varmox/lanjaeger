@@ -5,7 +5,7 @@ on:
   pull_request:
 
 jobs:
-  check:
+  stack:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -14,10 +14,16 @@ jobs:
       - name: Shell scripts
         run: shellcheck update.sh scripts/rotate-logs.sh
 
-      - name: Compose file
+      - name: Compose file (with and without the web UI)
         run: |
           cp .env.example .env
           docker compose config --quiet
+          COMPOSE_PROFILES=webui docker compose config --quiet
+
+      - name: Blocky config
+        run: |
+          docker run --rm -v "$PWD/blocky:/app/cfg:ro" --entrypoint /app/blocky \
+            ghcr.io/0xerr0r/blocky:v0.35.0 validate --config /app/cfg/config.yml
 
       - name: Log rotation
         run: |
@@ -28,3 +34,47 @@ jobs:
             sh -c 'timeout 5 sh /r.sh || true'
           test "$(stat -c %s /tmp/logs/access.log)" -eq 0
           test -f /tmp/logs/access.log.1.gz
+
+  webui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Backend tests
+        working-directory: webui/server
+        run: python -m unittest discover -s tests -t . -v
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      - name: Frontend build
+        working-directory: webui/frontend
+        run: |
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+          npm run build
+
+      - name: Upload build + lockfile
+        uses: actions/upload-artifact@v5
+        with:
+          name: frontend
+          path: |
+            webui/frontend/dist
+            webui/frontend/package-lock.json
+
+      - name: Image
+        run: docker build -t lanjaeger-webui:ci webui
+
+      - name: Smoke test
+        run: |
+          mkdir -p /tmp/lj/logs /tmp/lj/cache && printf 'CACHE_DISK_SIZE=100g\n' > /tmp/lj/.env
+          docker run -d --name lj -p 18080:8080 -e WEBUI_PASSWORD=ci -e PROJECT_DIR=/tmp/lj \
+            -v /tmp/lj:/tmp/lj -v /tmp/lj/logs:/data/logs:ro -v /tmp/lj/cache:/data/cache:ro lanjaeger-webui:ci
+          for i in $(seq 1 20); do curl -fsS http://127.0.0.1:18080/api/session && break; sleep 1; done
+          curl -fsS http://127.0.0.1:18080/ | grep -q '<lj-root>'
+          docker logs lj
