@@ -11,6 +11,8 @@ export function formatBytes(bytes: number | null | undefined, perSecond = false)
     v /= 1024;
     i++;
   }
+  // Intl's short "byte" unit reads "0 byte"; plain B is clearer below 1 kB.
+  if (i === 0) return `${Math.round(bytes)} B${perSecond ? '/s' : ''}`;
   const unit = perSecond ? `${UNITS[i]}-per-second` : UNITS[i];
   return new Intl.NumberFormat(undefined, {
     style: 'unit',
