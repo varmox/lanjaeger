@@ -35,7 +35,8 @@ import { ThemeService } from './shared/theme';
 
       <div class="content-container">
         @if (showNav()) {
-          <clr-vertical-nav [clrVerticalNavCollapsible]="true">
+          <!-- clr-nav-level=1: off-canvas behind a hamburger on small screens -->
+          <clr-vertical-nav [clrVerticalNavCollapsible]="true" [clr-nav-level]="1">
             <a clrVerticalNavLink routerLink="/dashboard" routerLinkActive="active">
               <cds-icon clrVerticalNavIcon shape="dashboard" aria-hidden="true"></cds-icon>Dashboard
             </a>
