@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Free disk space
         run: |
@@ -67,7 +67,7 @@ jobs:
           sudo chmod a+r appliance/out/work/lanjaeger-root.img
           appliance/test-boot.sh appliance/out/work/lanjaeger-root.img
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: lanjaeger-ova
           path: |
