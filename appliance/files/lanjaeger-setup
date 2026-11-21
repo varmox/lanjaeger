@@ -151,8 +151,9 @@ def save_state(state: dict) -> None:
     write(STATE_PATH, json.dumps(state, indent=1), 0o600)
 
 
-def digest(v: str) -> str:
-    return hashlib.sha256(v.encode()).hexdigest()
+def digest(v: str, salt: str) -> str:
+    """Salted scrypt: enough to notice a changed password, useless to crack it."""
+    return hashlib.scrypt(v.encode(), salt=bytes.fromhex(salt), n=2**14, r=8, p=1).hex()
 
 
 # ── early: system ──────────────────────────────────────────────────────
@@ -217,11 +218,12 @@ def setup_time(o: dict) -> None:
 
 def setup_root_password(o: dict, state: dict) -> None:
     pw = o["root_password"]
-    if not pw or state.get("root_password") == digest(pw):
+    salt = state.setdefault("salt", secrets.token_hex(16))
+    if not pw or state.get("root_password") == digest(pw, salt):
         return
     run("chpasswd", input=f"root:{pw}\n")
     run("chage", "-I", "-1", "-m", "0", "-M", "99999", "-E", "-1", "-d", time.strftime("%Y-%m-%d"), "root")
-    state["root_password"] = digest(pw)
+    state["root_password"] = digest(pw, salt)
     log("root password set")
 
 

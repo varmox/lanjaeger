@@ -26,7 +26,18 @@ GROUP = "ads"
 LISTS = {"allow": "allowlist.txt", "deny": "denylist.txt"}
 MAX_ENTRIES = 5000
 
-DOMAIN = re.compile(r"(\*\.)?([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+(xn--[a-z0-9-]{1,59}|[a-z]{2,63})")
+LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
+TLD = re.compile(r"xn--[a-z0-9-]{1,59}|[a-z]{2,63}")
+
+
+def valid_domain(d: str) -> bool:
+    """example.com, sub.example.com or *.example.com; checked label by label
+    (a single regex over the whole name backtracks badly on crafted input)."""
+    if d.startswith("*."):
+        d = d[2:]
+    labels = d.split(".")
+    return (len(labels) >= 2 and all(LABEL.fullmatch(lb) for lb in labels[:-1])
+            and TLD.fullmatch(labels[-1]) is not None)
 
 
 class BlockyError(RuntimeError):
@@ -89,7 +100,7 @@ def normalize(entries: list) -> tuple[list[str], list[str]]:
         d = str(raw).strip().lower().rstrip(".")
         if d.startswith("http://") or d.startswith("https://"):
             d = re.sub(r"^https?://", "", d).split("/", 1)[0]
-        if d and len(d) <= 253 and DOMAIN.fullmatch(d):
+        if d and len(d) <= 253 and valid_domain(d):
             good.add(d)
         elif d:
             bad.append(str(raw)[:100])
