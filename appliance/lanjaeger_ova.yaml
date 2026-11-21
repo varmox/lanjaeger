@@ -58,7 +58,7 @@ hardware:
     rootdisk:
         type: hard_disk
         parent: scsi1
-        disk_image: !param disk
+        disk_image: !param disk=lanjaeger-root.vmdk
     # The game cache. Created empty (thin) at deployment; to make it bigger,
     # edit "Hard disk 2" before the first power-on — or any time later: the
     # appliance grows the filesystem on the next boot.
