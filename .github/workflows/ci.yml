@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Shell scripts
         run: shellcheck update.sh scripts/rotate-logs.sh appliance/build.sh appliance/test-boot.sh
@@ -50,9 +50,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -60,7 +60,7 @@ jobs:
         working-directory: webui/server
         run: python -m unittest discover -s tests -t . -v
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: "24"
 
@@ -71,7 +71,7 @@ jobs:
           npm run build
 
       - name: Upload build + lockfile
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: frontend
           path: |
@@ -96,7 +96,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Start blocky, lancache-dns, the web UI and monitoring
         run: |
@@ -179,7 +179,7 @@ jobs:
             'http://127.0.0.1:3000/d/lanjaeger/lanjaeger?orgId=1&from=now-15m&to=now&kiosk' || true
           ls -l dashboard.png
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: monitoring
