@@ -10,7 +10,7 @@ RUN if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm inst
 COPY frontend/ ./
 RUN npm run build
 
-FROM docker:28-cli
+FROM docker:29-cli
 RUN apk add --no-cache python3 tzdata
 WORKDIR /app
 COPY server/lanjaeger_webui ./lanjaeger_webui
