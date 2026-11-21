@@ -66,7 +66,7 @@ import { JobPanel } from '../shared/job-panel';
       </section>
     }
 
-    <lj-confirm-dialog #confirmRestart [heading]="'Restart ' + pending()?.service + '?'" confirmLabel="Restart" [danger]="true">
+    <lj-confirm-dialog #confirmRestart [heading]="'Restart ' + (pending()?.service ?? 'service') + '?'" confirmLabel="Restart" [danger]="true">
       Clients downloading right now lose their connection for a few seconds and resume automatically.
     </lj-confirm-dialog>
     <lj-confirm-dialog #confirmUpdate heading="Update all lancache images?" confirmLabel="Update">

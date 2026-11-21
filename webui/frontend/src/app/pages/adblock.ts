@@ -136,7 +136,7 @@ type ListKind = 'allow' | 'deny';
                     <div class="clr-control-container">
                       <textarea class="clr-textarea lj-list" [id]="kind + '-list'" [name]="kind" rows="8"
                                 spellcheck="false" autocapitalize="off" autocomplete="off"
-                                [(ngModel)]="lists[kind]" [attr.aria-describedby]="kind + '-err'"
+                                [ngModel]="lists()[kind]" (ngModelChange)="setList(kind, $event)" [attr.aria-describedby]="kind + '-err'"
                                 [attr.aria-invalid]="listErrors()[kind] ? 'true' : null"></textarea>
                       <span class="clr-subtext lj-field-error" [id]="kind + '-err'">{{ listErrors()[kind] }}</span>
                     </div>
@@ -161,7 +161,7 @@ export class AdblockPage {
   protected readonly listErrors = signal<Partial<Record<ListKind, string>>>({});
   protected readonly signedIn = computed(() => !!this.api.session()?.signedIn);
   protected readonly kinds: ListKind[] = ['allow', 'deny'];
-  protected lists: Record<ListKind, string> = { allow: '', deny: '' };
+  protected readonly lists = signal<Record<ListKind, string>>({ allow: '', deny: '' });
 
   protected readonly blockedShare = computed(() => {
     const s = this.data()?.summary;
@@ -190,7 +190,7 @@ export class AdblockPage {
 
   private async loadLists() {
     const l = await this.api.adblockLists();
-    this.lists = { allow: l.allow.join('\n'), deny: l.deny.join('\n') };
+    this.lists.set({ allow: l.allow.join('\n'), deny: l.deny.join('\n') });
   }
 
   protected count(n: number | null | undefined) {
@@ -222,19 +222,23 @@ export class AdblockPage {
     return this.act(() => this.api.setBlocking(false, minutes), `Ad blocking paused for ${minutes} minutes.`);
   }
 
+  protected setList(kind: ListKind, text: string) {
+    this.lists.update((l) => ({ ...l, [kind]: text }));
+  }
+
   protected allow(domain: string) {
-    const current = this.lists.allow.split('\n').map((d) => d.trim()).filter(Boolean);
-    if (!current.includes(domain)) this.lists.allow = [...current, domain].join('\n');
+    const current = this.lists().allow.split('\n').map((d) => d.trim()).filter(Boolean);
+    if (!current.includes(domain)) this.setList('allow', [...current, domain].join('\n'));
     return this.saveList('allow');
   }
 
   protected async saveList(kind: ListKind) {
-    const domains = this.lists[kind].split(/\s+/).map((d) => d.trim()).filter(Boolean);
+    const domains = this.lists()[kind].split(/\s+/).map((d) => d.trim()).filter(Boolean);
     this.listErrors.set({});
     this.busy.set(true);
     try {
       const r = await this.api.saveAdblockList(kind, domains);
-      this.lists[kind] = r.domains.join('\n');
+      this.setList(kind, r.domains.join('\n'));
       this.message.set(r.refreshed ? `${kind === 'allow' ? 'Allowlist' : 'Denylist'} saved and applied.`
                                    : 'Saved — it applies when the ad blocker restarts.');
     } catch (e) {
