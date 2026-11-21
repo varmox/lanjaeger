@@ -82,6 +82,7 @@ class Stats:
         self.clients: dict[str, dict] = defaultdict(_counter)
         self.buckets: dict[int, list[int]] = {}           # start → [hit, miss]
         self.recent: list[tuple[float, str, str, int]] = []  # (ts, client, service, bytes)
+        self.baseline: dict | None = None                    # counters when the log replay finished
 
     def ingest(self, rec: dict) -> None:
         if rec["status"] >= 400:
@@ -99,6 +100,31 @@ class Stats:
             slot = self.buckets.setdefault(bucket, [0, 0])
             slot[0 if rec["hit"] else 1] += b
             self.recent.append((ts, rec["client"], rec["service"], b))
+
+    def mark_live(self) -> None:
+        """Called once the startup replay of the existing log is done. The
+        /metrics counters start here, so a web UI restart doesn't make
+        Prometheus count the replayed traffic a second time."""
+        with self._lock:
+            self.baseline = {"total": dict(self.total),
+                             "services": {k: dict(v) for k, v in self.services.items()},
+                             "clients": {k: dict(v) for k, v in self.clients.items()}}
+
+    def live_counters(self) -> dict | None:
+        """Traffic since mark_live(): {total, services, clients} of
+        {hitBytes, missBytes, requests}; None until the replay is done."""
+        keys = ("hitBytes", "missBytes", "requests")
+        with self._lock:
+            if self.baseline is None:
+                return None
+            base = self.baseline
+
+            def delta(cur: dict, b: dict) -> dict:
+                return {k: cur[k] - b.get(k, 0) for k in keys}
+
+            return {"total": delta(self.total, base["total"]),
+                    "services": {k: delta(v, base["services"].get(k, {})) for k, v in self.services.items()},
+                    "clients": {k: delta(v, base["clients"].get(k, {})) for k, v in self.clients.items()}}
 
     def _prune(self, now: float) -> None:
         cutoff = now - HISTORY_S
@@ -189,10 +215,14 @@ class LogFollower(threading.Thread):
         return n
 
     def run(self) -> None:
+        replaying = True
         while True:
             try:
                 while self.poll():
                     pass
             except OSError:
                 pass
+            if replaying:
+                self.stats.mark_live()
+                replaying = False
             time.sleep(self.interval)

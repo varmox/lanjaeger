@@ -5,6 +5,7 @@
 Environment:
   WEBUI_PASSWORD          required for sign-in; without it the UI is read-only
   WEBUI_PUBLIC_DASHBOARD  "true" = stats readable without signing in
+  METRICS_TOKEN           enables /metrics (Prometheus) for `Authorization: Bearer <token>`
   PROJECT_DIR             host path of the lanjaeger folder (mounted at the same path)
   LOG_DIR, CACHE_DIR      default /data/logs, /data/cache
   STATIC_DIR              built frontend, default /app/static
@@ -24,7 +25,7 @@ from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import adblock, alerts, checkdns, disk, dnsentries, docker_api, envfile, prefill
+from . import adblock, alerts, checkdns, disk, dnsentries, docker_api, envfile, metrics, prefill
 from .auth import COOKIE, SESSION_TTL, Auth, csrf_ok
 from .jobs import MANAGED, JobRunner
 from .stats import LogFollower, Stats
@@ -55,6 +56,7 @@ class Context:
         self.logins = {s: prefill.Login(self.prefill, s) for s in prefill.Login.COMMANDS} if self.prefill else {}
         self.alerts = alerts.Alerts(self.project_dir, self.project, self.cache_dir, self.prefill) if self.project_dir else None
         self.checks = checkdns.Store()
+        self.metrics_token = os.environ.get("METRICS_TOKEN", "")
 
     def check_answer_ip(self) -> str | None:
         """Where players reach the web UI: WEBUI_BIND_IP, else DNS_BIND_IP."""
@@ -147,6 +149,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def _dispatch(self, method: str):
         path = self.path.split("?", 1)[0]
+        if path == "/metrics" and method in ("GET", "HEAD"):
+            return self._metrics()
         if not path.startswith("/api/"):
             return self._static(path) if method in ("GET", "HEAD") else self._error(405, "method not allowed")
         if not csrf_ok(method, self.headers):
@@ -205,6 +209,16 @@ class Handler(BaseHTTPRequestHandler):
                 except (docker_api.DockerError, adblock.BlockyError) as exc:
                     return self._error(502, str(exc))
         self._error(404, "not found")
+
+    def _metrics(self):
+        if not self.ctx.metrics_token:
+            return self._error(404, "metrics are off — set METRICS_TOKEN")
+        if not metrics.token_ok(self.headers.get("Authorization"), self.ctx.metrics_token):
+            return self._json(401, {"error": "bearer token required"}, {"WWW-Authenticate": "Bearer"})
+        body = metrics.render(self.ctx).encode()
+        self._headers(200, "text/plain; version=0.0.4; charset=utf-8", len(body), {"Cache-Control": "no-store"})
+        if self.command != "HEAD":
+            self.wfile.write(body)
 
     # ── static files (Angular build, SPA fallback) ────────────────────
 

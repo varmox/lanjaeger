@@ -85,6 +85,7 @@ services:
     environment:
       WEBUI_PASSWORD: ${WEBUI_PASSWORD:-}
       WEBUI_PUBLIC_DASHBOARD: ${WEBUI_PUBLIC_DASHBOARD:-false}
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
       # The project folder is mounted at its own host path so `docker compose`
       # inside the container resolves relative paths exactly like on the host.
       PROJECT_DIR: ${PWD}
@@ -98,3 +99,76 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - blocky
+
+  # Optional monitoring (add "monitoring" to COMPOSE_PROFILES, see
+  # MONITORING.md): Telegraf collects host, container and lanjaeger metrics,
+  # Prometheus stores them, Grafana shows them. All three use the host
+  # network — Telegraf needs the host's network counters — and Telegraf and
+  # Prometheus listen on 127.0.0.1 only; Grafana is the one you open.
+  telegraf:
+    profiles: [monitoring]
+    image: ${TELEGRAF_IMAGE:-telegraf:1.34}
+    restart: ${RESTART_POLICY:-no}
+    logging: *logging
+    network_mode: host
+    # Group of /var/run/docker.sock, for container metrics:
+    #   stat -c %g /var/run/docker.sock
+    user: telegraf:${DOCKER_GID:-999}
+    environment:
+      HOST_ETC: /hostfs/etc
+      HOST_PROC: /hostfs/proc
+      HOST_SYS: /hostfs/sys
+      HOST_VAR: /hostfs/var
+      HOST_RUN: /hostfs/run
+      HOST_MOUNT_PREFIX: /hostfs
+      LANJAEGER_METRICS_URL: http://${WEBUI_BIND_IP:-127.0.0.1}:${WEBUI_PORT:-8080}/metrics
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+    volumes:
+      - ./monitoring/telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+      - ./monitoring/telegraf/telegraf.d:/etc/telegraf/telegraf.d:ro
+      - /:/hostfs:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  prometheus:
+    profiles: [monitoring]
+    image: ${PROMETHEUS_IMAGE:-prom/prometheus:v3.4.0}
+    restart: ${RESTART_POLICY:-no}
+    logging: *logging
+    network_mode: host
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${METRICS_RETENTION:-90d}
+      - --web.listen-address=127.0.0.1:9090
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+
+  grafana:
+    profiles: [monitoring]
+    image: ${GRAFANA_IMAGE:-grafana/grafana:12.0.0}
+    restart: ${RESTART_POLICY:-no}
+    logging: *logging
+    network_mode: host
+    environment:
+      GF_SERVER_HTTP_ADDR: ${GRAFANA_BIND_IP:-${WEBUI_BIND_IP:-0.0.0.0}}
+      GF_SERVER_HTTP_PORT: ${GRAFANA_PORT:-3000}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-${WEBUI_PASSWORD:-admin}}
+      # true = anyone on the LAN can view the dashboards (e.g. on a screen)
+      GF_AUTH_ANONYMOUS_ENABLED: ${GRAFANA_PUBLIC:-false}
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/lanjaeger-dashboards/lanjaeger.json
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/etc/lanjaeger-dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+volumes:
+  prometheus-data:
+  grafana-data:

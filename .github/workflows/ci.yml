@@ -19,6 +19,7 @@ jobs:
           cp .env.example .env
           docker compose config --quiet
           COMPOSE_PROFILES=webui docker compose config --quiet
+          COMPOSE_PROFILES=webui,monitoring docker compose config --quiet
           DNS_BIND_IP6=fd00::10 docker compose -f docker-compose.yml -f docker-compose.ipv6.yml config --quiet
 
       - name: Blocky config
@@ -88,13 +89,15 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Start blocky, lancache-dns and the web UI
+      - name: Start blocky, lancache-dns, the web UI and monitoring
         run: |
           cp .env.example .env
           sed -i -e 's/^LANCACHE_IP=.*/LANCACHE_IP=192.168.1.10/' -e 's/^DNS_BIND_IP=.*/DNS_BIND_IP=127.0.0.1/' \
                  -e 's/^WEBUI_PASSWORD=.*/WEBUI_PASSWORD=ci/' -e 's/^WEBUI_PORT=.*/WEBUI_PORT=18080/' \
-                 -e 's/^#COMPOSE_PROFILES=webui/COMPOSE_PROFILES=webui/' .env
-          docker compose up -d --build blocky dns webui
+                 -e 's/^#COMPOSE_PROFILES=webui/COMPOSE_PROFILES=webui,monitoring/' \
+                 -e 's/^METRICS_TOKEN=.*/METRICS_TOKEN=ci-token/' -e 's/^GRAFANA_PUBLIC=.*/GRAFANA_PUBLIC=true/' \
+                 -e "s/^DOCKER_GID=.*/DOCKER_GID=$(stat -c %g /var/run/docker.sock)/" .env
+          docker compose up -d --build blocky dns webui telegraf prometheus grafana
           for i in $(seq 1 90); do
             dig +short +time=1 +tries=1 @127.0.0.1 lancache.steamcontent.com | grep -qx 192.168.1.10 && break; sleep 2
           done
@@ -125,6 +128,55 @@ jobs:
             dig +short @127.0.0.1 nas.lan | grep -qx 192.168.1.20 && exit 0; sleep 3
           done
           echo "nas.lan never resolved"; exit 1
+
+      - name: Metrics endpoint
+        run: |
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/metrics)" = 401
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Authorization: Bearer nope' http://127.0.0.1:18080/metrics)" = 401
+          # Some cache traffic for the counters: two clients, hits and a miss.
+          for i in $(seq 1 12); do
+            now=$(date -u +%d/%b/%Y:%H:%M:%S)
+            for c in "10.0.0.5 HIT" "10.0.0.6 HIT" "10.0.0.6 MISS"; do
+              set -- $c
+              echo "[steam] $1 / - - - [$now +0000] \"GET /depot/1/chunk/$i HTTP/1.1\" 200 52428800 \"-\" \"Valve/Steam HTTP Client 1.0\" \"$2\" \"lancache.steamcontent.com\" \"-\"" \
+                | sudo tee -a lancache/logs/access.log >/dev/null
+            done
+            sleep 5
+          done
+          curl -fsS -H 'Authorization: Bearer ci-token' http://127.0.0.1:18080/metrics > metrics.txt
+          grep -E '^(lanjaeger_up|lanjaeger_dns_up|lanjaeger_clients_seen|lanjaeger_bytes_sent_to_clients_total|blocky_blocking_enabled) ' metrics.txt
+          grep -q '^lanjaeger_container_healthy{service="dns"} 1' metrics.txt
+          grep -q '^lanjaeger_client_bytes_total{client="10.0.0.6",status="miss"}' metrics.txt
+          grep -q '^lanjaeger_prefill_logged_in{service="battlenet"} 1' metrics.txt
+
+      - name: Telegraf → Prometheus → Grafana
+        run: |
+          q() { curl -fsS http://127.0.0.1:9090/api/v1/query --data-urlencode "query=$1" | jq -r '.data.result | length'; }
+          for i in $(seq 1 30); do [ "$(q 'lanjaeger_up')" -gt 0 ] && [ "$(q 'docker_container_cpu_usage_percent')" -gt 0 ] && break; sleep 5; done
+          for m in lanjaeger_up lanjaeger_clients_seen 'lanjaeger_service_bytes_total{status="hit"}' blocky_response_total \
+                   net_bytes_recv cpu_usage_idle docker_container_mem_usage; do
+            echo "$m: $(q "$m") series"; [ "$(q "$m")" -gt 0 ]
+          done
+          python3 .github/scripts/check-dashboard-metrics.py monitoring/grafana/dashboards/lanjaeger.json http://127.0.0.1:9090 \
+            lanjaeger_prefill_last_run_success lanjaeger_prefill_game_timestamp_seconds
+          curl -fsS -u admin:ci http://127.0.0.1:3000/api/datasources/uid/lanjaeger-prometheus/health | tee /dev/stderr | jq -e '.status == "OK"'
+          curl -fsS -u admin:ci http://127.0.0.1:3000/api/dashboards/uid/lanjaeger | jq -e '.dashboard.panels | length > 20'
+
+      - name: Dashboard screenshot
+        run: |
+          sleep 60   # a few more data points
+          google-chrome --headless=new --no-sandbox --hide-scrollbars --window-size=1600,4200 \
+            --virtual-time-budget=20000 --screenshot=dashboard.png \
+            'http://127.0.0.1:3000/d/lanjaeger/lanjaeger?orgId=1&from=now-15m&to=now&kiosk' || true
+          ls -l dashboard.png
+
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: monitoring
+          path: |
+            dashboard.png
+            metrics.txt
 
       - name: No per-query logging (privacy)
         run: |

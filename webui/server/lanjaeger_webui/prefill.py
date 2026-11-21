@@ -351,7 +351,8 @@ class Runner:
                 settings = self.store.load()
                 if service == "epic":
                     self._prune_epic_selection(settings)
-                self.run_container(service, args_for(service, settings))
+                if self.run_container(service, args_for(service, settings)) == 0 and service == "steam":
+                    record_steam_success(self.store, settings["steam"]["games"])
             except docker_api.DockerError as exc:
                 self._note_error(service, str(exc))
 
@@ -444,6 +445,18 @@ class Runner:
             }
         return out
 
+    def last_runs(self) -> dict:
+        """Per service: {running, exitCode, finished (unix time or None)} of
+        the last tool container, without its log (cheap enough for scrapes)."""
+        out = {}
+        for service in SERVICE_ORDER:
+            info = docker_api.inspect(container_name(self.project, service))
+            if info:
+                st = info["State"]
+                out[service] = {"running": st["Running"], "exitCode": st["ExitCode"],
+                                "finished": None if st["Running"] else _docker_time(st.get("FinishedAt", ""))}
+        return out
+
     # Nightly schedule
     def tick(self, now: dt.datetime | None = None) -> bool:
         now = dt.datetime.now() if now is None else now
@@ -481,6 +494,85 @@ EPIC_EXCLUDED_NAMESPACES = {"ue", "89efe5924d3d467c839449ab6ab52e7f"}  # Unreal 
 
 class TokenExpired(Exception):
     pass
+
+
+def _docker_time(s: str) -> int | None:
+    """Docker's RFC 3339 time (nanoseconds, 'Z') → unix seconds; None for 'never'."""
+    try:
+        t = dt.datetime.strptime(s[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=dt.timezone.utc)
+    except ValueError:
+        return None
+    return int(t.timestamp()) if t.year >= 1970 else None
+
+
+# ── what has been prefilled ─────────────────────────────────────────────
+#
+# Epic and Battle.net tools record finished games themselves; Steam records
+# depots, which can't be mapped to games offline, so for Steam we note the
+# explicitly selected games after a run that exited with 0.
+
+
+def _steam_record_path(store: Store) -> str:
+    return os.path.join(store.root, "steam", "prefilled.json")
+
+
+def record_steam_success(store: Store, games: dict, now: float | None = None) -> None:
+    path = _steam_record_path(store)
+    try:
+        with open(path, encoding="utf-8") as f:
+            done = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        done = {}
+    ts = int(time.time() if now is None else now)
+    for app_id, name in games.items():
+        done[str(app_id)] = {"name": name, "time": ts}
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path + ".tmp", "w", encoding="utf-8") as f:
+        json.dump(done, f)
+    os.replace(path + ".tmp", path)
+
+
+def _load_json(path: str):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return None
+
+
+def steam_depot_count(store: Store) -> int | None:
+    depots = _load_json(os.path.join(store.root, "steam", "config", "successfullyDownloadedDepots.json"))
+    return len(depots) if isinstance(depots, dict) else None
+
+
+def prefilled(store: Store) -> list[dict]:
+    """Games prefilled at least once: [{service, id, name, time}]."""
+    out = []
+    steam = _load_json(_steam_record_path(store))
+    if isinstance(steam, dict):
+        out += [{"service": "steam", "id": k, "name": v.get("name") or k, "time": int(v.get("time") or 0)}
+                for k, v in steam.items() if isinstance(v, dict)]
+
+    epic_path = os.path.join(store.root, "epic", "config", "successfullyDownloadedApps.json")
+    epic = _load_json(epic_path)
+    if isinstance(epic, dict):
+        titles = {g["id"]: g["title"] for g in read_epic_library(store).get("games", [])}
+        titles.update(store.load()["epic"]["games"])
+        mtime = int(os.path.getmtime(epic_path))
+        out += [{"service": "epic", "id": k, "name": titles.get(k, k), "time": mtime} for k in epic]
+
+    bn_dir = os.path.join(store.root, "battlenet", "cache", "BattlenetPrefill", "v1")
+    names = {p["code"]: p["name"] for p in BATTLENET_PRODUCTS}
+    try:
+        files = sorted(os.listdir(bn_dir))
+    except OSError:
+        files = []
+    for f in files:
+        m = re.fullmatch(r"prefilledVersion-(.+)\.txt", f)
+        if m:
+            out.append({"service": "battlenet", "id": m[1], "name": names.get(m[1], m[1]),
+                        "time": int(os.path.getmtime(os.path.join(bn_dir, f)))})
+    return out
 
 
 def _parse_dotnet_time(s: str) -> dt.datetime:

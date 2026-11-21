@@ -215,6 +215,15 @@ Use a normal gaming PC on a table switch, with DHCP left on automatic.
 | I5 | Unplug the WAN, try installing a cached game | note what happens. The files are local, but launchers usually still need the internet for login and download manifests, so this mainly shows how each launcher behaves |
 | I6 | Set `LOG_MAX_SIZE_MB=10` temporarily, download a bit | `access.log` gets rotated into `access.log.1.gz` |
 
+### J. Monitoring (if used)
+
+| # | Step | Expected |
+|---|---|---|
+| J1 | `curl -H "Authorization: Bearer <METRICS_TOKEN>" http://192.168.10.10:8080/metrics` | `lanjaeger_up 1`, `lanjaeger_dns_up 1`; without the token: 401 |
+| J2 | Grafana `http://192.168.10.10:3000` → lanjaeger dashboard during test B3/B4 | traffic, hit/miss, the PC under "Top clients", containers green |
+| J3 | After test F2 | the game appears in "Prefilled games" |
+| J4 | VCF Operations: the server's object after 10 min | `prometheus` metrics such as `lanjaeger_clients_seen`, plus `net`, `cpu`, `docker` |
+
 ### What CI already covers
 
 Every push runs these automatically, so they don't need retesting by hand:
@@ -245,3 +254,4 @@ Copy this into an issue or a note for each test round:
 | | G | | |
 | | H | | |
 | | I | | |
+| | J | | |
