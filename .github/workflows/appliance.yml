@@ -5,6 +5,7 @@ name: Appliance
 
 on:
   push:
+    branches: ["**"]
     tags: ["v*"]
     paths:
       - appliance/**
