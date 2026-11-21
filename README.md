@@ -21,7 +21,7 @@ docker compose up -d
 docker compose ps    # dns and monolithic should turn "healthy" within ~2 minutes
 ```
 
-Then make your clients use the cache's DNS: hand out `DNS_BIND_IP` as the **only** DNS server in your router's DHCP settings. Before a LAN party, go through **[NETWORK.md](NETWORK.md)**: IPv6 DNS, switches, uplink and the other network things that decide whether the cache actually gets used.
+Then make your clients use the cache's DNS: hand out `DNS_BIND_IP` as the **only** DNS server in your router's DHCP settings. Before a LAN party, go through **[NETWORK.md](NETWORK.md)**: IPv6 DNS, switches, uplink and the other network things that decide whether the cache actually gets used. **[SETUP.md](SETUP.md)** shows the recommended setup (diagram, IP plan, `.env`, router settings) and the test plan to run on it before the event.
 
 Once everything works, set `RESTART_POLICY=unless-stopped` in `.env` and run `docker compose up -d` again so the stack survives reboots.
 
