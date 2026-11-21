@@ -53,6 +53,17 @@ clients ──► blocky :53 ──► lancache-dns ──► UPSTREAM_DNS
 
 If something breaks (a shop's checkout, a game launcher's login), open **Ad blocking → Most blocked** in the web UI and click **Allow**, or add the domain to `blocky/allowlist.txt` and run `docker compose restart blocky`.
 
+## DNS entries
+
+Give devices on the LAN their own names, for example `nas.lan` or `cs2.lan` for a game server, under **DNS entries** in the web UI. You can also edit `blocky/hosts.txt` directly (format: `<IP> <name>  # note`).
+
+- **No downtime:** Blocky re-reads the file every minute, so changes go live without restarting DNS. **Apply now** restarts Blocky for an instant change, at the cost of about 2 seconds without DNS and a reset of the 24-hour ad-blocking stats.
+- **A and AAAA records, exact names only:** `nas.lan` doesn't cover `www.nas.lan`. Avoid `.local`, which belongs to mDNS/Bonjour.
+- **Overrides the cache:** entries are answered before lancache-dns, so an entry for a game download domain overrides the cache for that name.
+- **Test a name:** shows what the DNS server answers for any name, and whether the answer came from your entries, the ad blocker, the cache or upstream.
+
+lancache-dns itself is [BIND 9](https://www.isc.org/bind/) with zones generated from [uklans/cache-domains](https://github.com/uklans/cache-domains). Blocky, in front of it, handles ad blocking, caching and these entries.
+
 ## Prefill
 
 Fill the cache before people arrive, for example the night before a LAN party, so even the first install on every machine runs at LAN speed. Set it up in the web UI under **Prefill**. It uses [tpill90's prefill tools](https://github.com/tpill90) for Steam, Epic and Battle.net, started as one-off containers.

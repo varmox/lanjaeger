@@ -50,6 +50,9 @@ import { ThemeService } from './shared/theme';
               <a clrVerticalNavLink routerLink="/prefill" routerLinkActive="active">
                 <cds-icon clrVerticalNavIcon shape="download" aria-hidden="true"></cds-icon>Prefill
               </a>
+              <a clrVerticalNavLink routerLink="/dns" routerLinkActive="active">
+                <cds-icon clrVerticalNavIcon shape="network-globe" aria-hidden="true"></cds-icon>DNS entries
+              </a>
               <a clrVerticalNavLink routerLink="/alerts" routerLinkActive="active">
                 <cds-icon clrVerticalNavIcon shape="bell" aria-hidden="true"></cds-icon>Alerts
               </a>

@@ -24,6 +24,7 @@ export const routes: Routes = [
   { path: 'clients', title: 'Clients · lanjaeger', canActivate: [canRead], loadComponent: () => import('./pages/clients').then((m) => m.ClientsPage) },
   { path: 'adblock', title: 'Ad blocking · lanjaeger', canActivate: [canRead], loadComponent: () => import('./pages/adblock').then((m) => m.AdblockPage) },
   { path: 'prefill', title: 'Prefill · lanjaeger', canActivate: [canAdmin], loadComponent: () => import('./pages/prefill').then((m) => m.PrefillPage) },
+  { path: 'dns', title: 'DNS entries · lanjaeger', canActivate: [canAdmin], loadComponent: () => import('./pages/dns').then((m) => m.DnsPage) },
   { path: 'alerts', title: 'Alerts · lanjaeger', canActivate: [canAdmin], loadComponent: () => import('./pages/alerts').then((m) => m.AlertsPage) },
   { path: 'services', title: 'Services · lanjaeger', canActivate: [canAdmin], loadComponent: () => import('./pages/services').then((m) => m.ServicesPage) },
   { path: 'settings', title: 'Settings · lanjaeger', canActivate: [canAdmin], loadComponent: () => import('./pages/settings').then((m) => m.SettingsPage) },

@@ -24,6 +24,7 @@ services:
       - ./blocky/config.yml:/app/config.yml:ro
       - ./blocky/allowlist.txt:/app/lists/allowlist.txt:ro
       - ./blocky/denylist.txt:/app/lists/denylist.txt:ro
+      - ./blocky/hosts.txt:/app/lists/hosts.txt:ro
     depends_on:
       - dns
 

@@ -33,8 +33,10 @@ class BlockyError(RuntimeError):
     pass
 
 
-def _call(method: str, path: str, timeout: float = 5):
-    req = urllib.request.Request(BLOCKY_URL + path, method=method)
+def _call(method: str, path: str, timeout: float = 5, body: dict | None = None):
+    data = json.dumps(body).encode() if body is not None else None
+    headers = {"Content-Type": "application/json"} if body is not None else {}
+    req = urllib.request.Request(BLOCKY_URL + path, data=data, headers=headers, method=method)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             body = r.read()
@@ -68,6 +70,11 @@ def disable(minutes: int | None = None) -> None:
 
 def refresh_lists() -> None:
     _call("POST", "/api/lists/refresh", timeout=120)
+
+
+def query(name: str, qtype: str = "A") -> dict:
+    """Resolve through Blocky: {reason, response, responseType, returnCode}."""
+    return _call("POST", "/api/query", body={"query": name, "type": qtype})
 
 
 # ── list files ──────────────────────────────────────────────────────────

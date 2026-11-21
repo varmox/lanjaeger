@@ -56,6 +56,18 @@ blocking:
 rebindingProtection:
   enable: false
 
+# Your own DNS entries (web UI → DNS entries, or edit hosts.txt).
+# Re-read every minute, so changes apply without restarting DNS.
+# Exact names only (no wildcards/CNAMEs); answered before lancache-dns,
+# so an entry for a game CDN name overrides the cache for that name.
+hostsFile:
+  sources:
+    - /app/lists/hosts.txt
+  hostsTTL: 1m
+  loading:
+    refreshPeriod: 1m
+    strategy: fast
+
 caching:
   prefetching: true
 

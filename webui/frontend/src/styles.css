@@ -150,3 +150,13 @@ dialog::backdrop {
 
 /* Space between Clarity's toggle switch and its label. */
 .clr-toggle-wrapper label { padding-inline-start: 0.5rem; }
+
+/* DNS entries page */
+.lj-dns-table { margin-top: 0; }
+.lj-dns-table input { inline-size: 100%; min-inline-size: 8rem; }
+.lj-row-error input[aria-invalid="true"] { border-bottom-color: var(--cds-alias-status-danger, #c21d00); }
+.lj-row-error-msg td { border-top: 0; padding-top: 0; }
+.lj-lookup { display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 1rem; margin-top: 1rem; }
+.lj-lookup dt { font-weight: 600; }
+.lj-lookup dd { margin: 0; overflow-wrap: anywhere; }
+.lj-table-scroll { overflow-x: auto; }

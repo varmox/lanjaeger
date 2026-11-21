@@ -24,7 +24,7 @@ from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import adblock, alerts, disk, docker_api, envfile, prefill
+from . import adblock, alerts, disk, dnsentries, docker_api, envfile, prefill
 from .auth import COOKIE, SESSION_TTL, Auth, csrf_ok
 from .jobs import MANAGED, JobRunner
 from .stats import LogFollower, Stats
@@ -152,6 +152,10 @@ class Handler(BaseHTTPRequestHandler):
             ("POST", r"/api/adblock/blocking", self.post_blocking, "admin"),
             ("GET", r"/api/adblock/lists", self.get_lists, "admin"),
             ("PUT", r"/api/adblock/lists/(allow|deny)", self.put_list, "admin"),
+            ("GET", r"/api/dns/entries", self.get_dns_entries, "admin"),
+            ("PUT", r"/api/dns/entries", self.put_dns_entries, "admin"),
+            ("POST", r"/api/dns/lookup", self.post_dns_lookup, "admin"),
+            ("POST", r"/api/dns/apply", self.post_dns_apply, "admin"),
             ("GET", r"/api/alerts", self.get_alerts, "admin"),
             ("PUT", r"/api/alerts/settings", self.put_alerts, "admin"),
             ("POST", r"/api/alerts/test", self.post_alerts_test, "admin"),
@@ -423,6 +427,39 @@ class Handler(BaseHTTPRequestHandler):
         except RuntimeError as exc:
             return self._error(409, str(exc))
         self._json(202, {"refresh": self.ctx.prefill.epic_refresh})
+
+    # ── custom DNS entries ────────────────────────────────────────────
+
+    def _project_dir(self) -> str:
+        if not self.ctx.project_dir:
+            raise ValueError("DNS entries need PROJECT_DIR")
+        return self.ctx.project_dir
+
+    def get_dns_entries(self):
+        self._json(200, {"entries": dnsentries.read(self._project_dir())})
+
+    def put_dns_entries(self):
+        clean, errors = dnsentries.validate(self._body().get("entries"))
+        if errors:
+            return self._error(422, "invalid entries", rows={str(k): v for k, v in errors.items()})
+        dnsentries.write(self._project_dir(), clean)
+        self._json(200, {"entries": clean})
+
+    def post_dns_lookup(self):
+        body = self._body()
+        name = str(body.get("name", "")).strip().lower().rstrip(".")
+        qtype = str(body.get("type", "A")).upper()
+        if not dnsentries.NAME.fullmatch(name) or qtype not in ("A", "AAAA", "CNAME", "TXT", "MX"):
+            raise ValueError("enter a hostname and a type of A, AAAA, CNAME, TXT or MX")
+        self._json(200, adblock.query(name, qtype))
+
+    def post_dns_apply(self):
+        # Blocky re-reads hosts.txt every minute; a restart applies it now
+        # (a ~2 s DNS gap for the LAN, and the 24 h ad-block stats reset).
+        if not self.ctx.docker or not self.ctx.project:
+            raise ValueError("applying immediately needs the Docker socket")
+        docker_api.restart(self.ctx.project, "blocky")
+        self._json(200, {"restarted": "blocky"})
 
     def post_job(self):
         action = self._body().get("action")

@@ -158,6 +158,19 @@ export interface Alerts {
 /** Placeholder the server sends instead of a stored secret; send it back to keep it. */
 export const SECRET_PLACEHOLDER = '__unchanged__';
 
+export interface DnsEntry {
+  name: string;
+  ip: string;
+  note: string;
+}
+
+export interface DnsLookup {
+  reason: string;
+  response: string;
+  responseType: string;
+  returnCode: string;
+}
+
 /** Message from an API error body, or a generic one. */
 export function errorMessage(err: unknown): string {
   if (err instanceof HttpErrorResponse) {
@@ -304,6 +317,22 @@ export class Api {
 
   testAlerts() {
     return firstValueFrom(this.http.post<{ results: Record<string, string> }>('/api/alerts/test', {}));
+  }
+
+  dnsEntries() {
+    return firstValueFrom(this.http.get<{ entries: DnsEntry[] }>('/api/dns/entries'));
+  }
+
+  saveDnsEntries(entries: DnsEntry[]) {
+    return firstValueFrom(this.http.put<{ entries: DnsEntry[] }>('/api/dns/entries', { entries }));
+  }
+
+  dnsLookup(name: string, type: string) {
+    return firstValueFrom(this.http.post<DnsLookup>('/api/dns/lookup', { name, type }));
+  }
+
+  applyDnsNow() {
+    return firstValueFrom(this.http.post('/api/dns/apply', {}));
   }
 
   job() {

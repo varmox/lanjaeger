@@ -1,0 +1,2 @@
+# Custom DNS entries, hosts-file format: <IP> <name> [# note]
+# Edit here or in the web UI (DNS entries). Applied within a minute.
