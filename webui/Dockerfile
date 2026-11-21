@@ -1,7 +1,7 @@
 # lanjaeger web UI: Angular frontend + Python API in one small image.
 # Based on docker:cli so the API can run `docker compose` for updates.
 
-FROM node:24-alpine AS frontend
+FROM node:26-alpine AS frontend
 WORKDIR /src
 # Direct dependencies are pinned exactly in package.json. Switch to
 # `npm ci` once frontend/package-lock.json is committed.
