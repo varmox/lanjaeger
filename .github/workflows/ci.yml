@@ -96,12 +96,13 @@ jobs:
                  -e 's/^#COMPOSE_PROFILES=webui/COMPOSE_PROFILES=webui/' .env
           docker compose up -d --build blocky dns webui
           for i in $(seq 1 90); do
-            [ "$(dig +short +time=1 +tries=1 @127.0.0.1 lancache.steamcontent.com)" = 192.168.1.10 ] && break; sleep 2
+            dig +short +time=1 +tries=1 @127.0.0.1 lancache.steamcontent.com | grep -qx 192.168.1.10 && break; sleep 2
           done
 
       - name: Game domains resolve to the cache
         run: |
-          test "$(dig +short @127.0.0.1 lancache.steamcontent.com)" = 192.168.1.10
+          # lancache-dns answers with a CNAME chain ending in LANCACHE_IP
+          dig +short @127.0.0.1 lancache.steamcontent.com | tee /dev/stderr | grep -qx 192.168.1.10
           dig +short @127.0.0.1 github.com | grep -q .     # everything else is forwarded
 
       - name: Client check (DNS responder via Blocky's conditional zone)
@@ -110,7 +111,7 @@ jobs:
           start=$(curl -fsS -X POST -H 'X-Lanjaeger: 1' http://127.0.0.1:18080/api/check/start)
           id=$(echo "$start" | jq -r .id)
           for h in $(echo "$start" | jq -r '.hosts[]'); do
-            test "$(dig +short @127.0.0.1 "$h")" = 127.0.0.1      # answered with the web UI's address
+            dig +short @127.0.0.1 "$h" | grep -qx 127.0.0.1      # answered with the web UI's address
           done
           curl -fsS "http://127.0.0.1:18080/api/check/result/$id" | tee /dev/stderr | jq -e '.seen == .total'
 
@@ -121,9 +122,13 @@ jobs:
           curl -fsS -b jar -X PUT -H 'X-Lanjaeger: 1' -H 'Content-Type: application/json' \
             -d '{"entries":[{"name":"nas.lan","ip":"192.168.1.20","note":"ci"}]}' http://127.0.0.1:18080/api/dns/entries
           for i in $(seq 1 50); do
-            [ "$(dig +short @127.0.0.1 nas.lan)" = 192.168.1.20 ] && exit 0; sleep 3
+            dig +short @127.0.0.1 nas.lan | grep -qx 192.168.1.20 && exit 0; sleep 3
           done
           echo "nas.lan never resolved"; exit 1
+
+      - name: No per-query logging (privacy)
+        run: |
+          ! docker compose logs blocky | grep -q 'queryLog: query resolved'
 
       - name: Logs on failure
         if: failure()
