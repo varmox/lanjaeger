@@ -76,6 +76,8 @@ WEBUI_PUBLIC_DASHBOARD=false       # true = stats on a screen without sign-in
 
 ### Router settings
 
+Complete configurations for example networks, including a FortiGate with SD-WAN over two uplinks, are in [examples/](examples/README.md).
+
 - [ ] DHCP hands out **only** `192.168.10.10` as DNS server, with no secondary.
 - [ ] IPv6 is off on the party network, **or** the router's announced IPv6 DNS (RDNSS / DHCPv6) is `DNS_BIND_IP6`.
 - [ ] Outgoing DNS (UDP/TCP 53) and DNS-over-TLS (853) from the party network is redirected to or blocked except for lanjaeger. lanjaeger itself must still reach `UPSTREAM_DNS`.
@@ -200,6 +202,7 @@ Use a normal gaming PC on a table switch, with DHCP left on automatic.
 | H3 | Meanwhile run `htop` / `iostat -x 2` on the server | disk not at 100% busy all the time; CPU not maxed out |
 | H4 | Meanwhile play an online game on another PC | ping stays stable (SQM works) |
 | H5 | Core switch port counters | no errors or drops on the server port |
+| H6 | With two uplinks (SD-WAN): watch both WAN interfaces during H1 | cache misses use **both** links (FortiGate: tests FG1–FG7 in [examples/fortigate.md](examples/fortigate.md#6-check-that-it-works)) |
 
 ### I. Security and failure behaviour
 

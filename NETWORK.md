@@ -1,6 +1,6 @@
 # Network checklist for a LAN party
 
-lanjaeger caches downloads and filters ads only for devices that actually use its DNS and can reach it quickly. Most "the cache doesn't work" problems are network problems. Go through this before people arrive.
+lanjaeger caches downloads and filters ads only for devices that actually use its DNS and can reach it quickly. Most "the cache doesn't work" problems are network problems. Go through this before people arrive. For complete example networks with router configurations (including a FortiGate with SD-WAN), see [examples/](examples/README.md).
 
 ## Must-haves
 
@@ -37,7 +37,7 @@ Every client downloads from the cache at once, so its link is the bottleneck: 1 
 LAN game discovery relies on broadcasts, so keep all players in one subnet: no client isolation, and no VLAN per table. Keep the party separate from your home network. Make the DHCP pool large enough for phones too (a /23 gives about 500 addresses). Put Wi-Fi on a separate guest network.
 
 **9. Keep online games playable during downloads.**
-Downloads that miss the cache can fill your internet line, and everyone's ping goes up. Enable SQM with CAKE (or fq_codel on weak routers) on the router ([OpenWrt SQM](https://openwrt.org/docs/guide-user/network/traffic-shaping/sqm)). Run [prefill](README.md#prefill) the night before, so the big downloads happen before people arrive.
+Downloads that miss the cache can fill your internet line, and everyone's ping goes up. Enable SQM with CAKE (or fq_codel on weak routers) on the router ([OpenWrt SQM](https://openwrt.org/docs/guide-user/network/traffic-shaping/sqm)). On a FortiGate, use traffic shaping policies instead ([examples/fortigate.md](examples/fortigate.md#5-traffic-shaping-policy--objects--traffic-shaping)). Run [prefill](README.md#prefill) the night before, so the big downloads happen before people arrive.
 
 ## Test every device
 
