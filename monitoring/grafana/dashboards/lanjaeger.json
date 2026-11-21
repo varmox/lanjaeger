@@ -1036,7 +1036,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(blocky_response_total{response_type=\"BLOCKED\"}[$__range])) / sum(increase(blocky_response_total[$__range]))",
+          "expr": "(sum(increase(blocky_response_total{response_type=\"BLOCKED\"}[$__range])) or vector(0)) / sum(increase(blocky_response_total[$__range]))",
           "legendFormat": "",
           "refId": "A"
         }
@@ -1345,7 +1345,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (name) (rate(diskio_read_bytes[$__rate_interval]))",
+          "expr": "sum by (name) (rate(diskio_read_bytes{name!~\"loop.*|ram.*\"}[$__rate_interval]))",
           "legendFormat": "{{name}} read",
           "refId": "A"
         },
@@ -1354,7 +1354,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (name) (rate(diskio_write_bytes[$__rate_interval]))",
+          "expr": "sum by (name) (rate(diskio_write_bytes{name!~\"loop.*|ram.*\"}[$__rate_interval]))",
           "legendFormat": "{{name}} write",
           "refId": "B"
         }
@@ -1619,6 +1619,7 @@
       ],
       "fieldConfig": {
         "defaults": {
+          "noValue": "No runs yet",
           "color": {
             "mode": "fixed",
             "fixedColor": "text"
@@ -1755,7 +1756,9 @@
         }
       ],
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "noValue": "Nothing prefilled yet"
+        },
         "overrides": [
           {
             "matcher": {

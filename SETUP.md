@@ -236,6 +236,7 @@ Every push runs these automatically, so they don't need retesting by hand:
   - the check zone answers through Blocky, and a full check counts 6 of 6;
   - a DNS entry saved in the web UI goes live without a restart;
   - Blocky doesn't log queries.
+  - the `/metrics` endpoint (token required) reports test traffic correctly, and Telegraf → Prometheus → Grafana delivers every metric the dashboard uses.
 
 **Not covered by CI, and why the test plan exists:** the monolithic cache serving real downloads, real Steam/Epic/Battle.net logins and prefills, real alert delivery, real player devices and routers (IPv6, encrypted DNS), and throughput under load.
 
