@@ -16,6 +16,10 @@ on:
       - webui/**
       - .github/workflows/appliance.yml
   workflow_dispatch:
+  # Monthly rebuild: Photon OS security updates and the newest lancache
+  # images, published as the rolling "appliance-latest" pre-release.
+  schedule:
+    - cron: "37 3 1 * *"
 
 permissions:
   contents: write
@@ -34,7 +38,9 @@ jobs:
 
       - name: Build the OVA
         run: |
-          if [ "$GITHUB_REF_TYPE" = tag ]; then export VERSION=${GITHUB_REF_NAME#v}; else export VERSION=0.0.0-${GITHUB_SHA::7}; fi
+          if [ "$GITHUB_REF_TYPE" = tag ]; then export VERSION=${GITHUB_REF_NAME#v}
+          elif [ "$GITHUB_EVENT_NAME" = schedule ]; then export VERSION=$(date -u +%Y.%m.%d)-${GITHUB_SHA::7}
+          else export VERSION=0.0.0-${GITHUB_SHA::7}; fi
           appliance/build.sh
           ls -l appliance/out
 
@@ -73,3 +79,14 @@ jobs:
         run: |
           gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --generate-notes
           gh release upload "$GITHUB_REF_NAME" appliance/out/*.ova appliance/out/*.sha256 --clobber
+
+      - name: Rolling pre-release (monthly build)
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete appliance-latest --cleanup-tag --yes 2>/dev/null || true
+          gh release create appliance-latest --prerelease --target "$GITHUB_SHA" \
+            --title "Appliance: latest monthly build ($(date -u +%Y-%m-%d))" \
+            --notes "Monthly rebuild of the lanjaeger appliance from main, with current Photon OS 5 updates and container images. For production, prefer a numbered release." \
+            appliance/out/*.ova appliance/out/*.sha256

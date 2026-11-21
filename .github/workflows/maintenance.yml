@@ -1,0 +1,57 @@
+name: Maintenance
+
+# Weekly: newer versions of the pinned container images (Blocky, Telegraf,
+# Prometheus, Grafana, busybox, prefill tools) → one pull request, tested by
+# CI. Images must be at least a week old, so broken releases get pulled
+# before we pick them up.
+
+on:
+  schedule:
+    - cron: "17 5 * * 1"        # Mondays 05:17 UTC
+  workflow_dispatch:
+    inputs:
+      min_age_days:
+        description: "Only versions at least this many days old"
+        default: "7"
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency: maintenance
+
+jobs:
+  image-updates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BRANCH: maintenance/image-updates
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Look for newer images
+        id: check
+        run: |
+          python3 .github/scripts/update-images.py --apply --min-age-days "${{ inputs.min_age_days || 7 }}" > body.md
+          cat body.md
+          if head -1 body.md | grep -qx 'no updates'; then echo "changed=false" >> "$GITHUB_OUTPUT"; else echo "changed=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Open or update the pull request
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add docker-compose.yml webui/server/lanjaeger_webui/prefill.py .github/workflows/ci.yml
+          git commit -q -m "Update pinned container images" -m "$(sed -n '3,20p' body.md)"
+          git push -f origin "$BRANCH"
+          if gh pr view "$BRANCH" --json state --jq .state 2>/dev/null | grep -qx OPEN; then
+            gh pr edit "$BRANCH" --body-file body.md
+          else
+            gh label create dependencies --color 0366d6 2>/dev/null || true
+            gh pr create --head "$BRANCH" --title "Update pinned container images" --body-file body.md --label dependencies
+          fi
+          # Pushes made with GITHUB_TOKEN don't start workflows: start CI explicitly.
+          gh workflow run ci.yml --ref "$BRANCH"

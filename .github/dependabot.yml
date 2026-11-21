@@ -1,0 +1,31 @@
+# Dependabot: weekly pull requests for the things it understands. The
+# container images in docker-compose.yml are pinned through variables,
+# which Dependabot can't read — the Maintenance workflow handles those.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    labels: [dependencies]
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /webui/frontend
+    schedule:
+      interval: weekly
+    labels: [dependencies]
+    groups:
+      angular:
+        patterns: ["@angular/*", "@angular-devkit/*", "@clr/*", "@cds/*", "typescript", "zone.js", "rxjs"]
+      other:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    directory: /webui
+    schedule:
+      interval: weekly
+    labels: [dependencies]

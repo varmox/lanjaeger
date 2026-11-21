@@ -3,6 +3,15 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
+  # Weekly run on main: lancache's images are on :latest and upstream lists
+  # change, so things can break without a commit here. Failures open an issue.
+  schedule:
+    - cron: "23 6 * * 0"        # Sundays
+
+permissions:
+  contents: read
+  issues: write
 
 jobs:
   stack:
@@ -185,3 +194,23 @@ jobs:
       - name: Logs on failure
         if: failure()
         run: docker compose logs --tail 80
+
+  report:
+    needs: [stack, webui, integration]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Open or update an issue
+        run: |
+          run="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          title="Weekly CI run failed"
+          n=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq '.[0].number')
+          if [ -n "$n" ]; then
+            gh issue comment "$n" -R "$GITHUB_REPOSITORY" --body "Failed again: $run"
+          else
+            gh label create maintenance -R "$GITHUB_REPOSITORY" --color fbca04 2>/dev/null || true
+            gh issue create -R "$GITHUB_REPOSITORY" --title "$title" --label maintenance --body \
+              "The scheduled CI run on main failed: $run. Most likely an upstream image (lancache on :latest) or list changed."
+          fi

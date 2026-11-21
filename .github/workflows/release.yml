@@ -1,0 +1,59 @@
+name: Release
+
+# Actions → Release → Run workflow → version (e.g. 1.2.0).
+# Checks that CI passed on the commit, tags it vX.Y.Z, creates the GitHub
+# release with generated notes, then builds and attaches the appliance OVA.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version, e.g. 1.2.0 (no leading v)"
+        required: true
+      prerelease:
+        description: "Mark as pre-release"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check version and CI
+        run: |
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::'$VERSION' is not a version like 1.2.0"; exit 1; }
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null; then
+            echo "::error::v$VERSION already exists"; exit 1
+          fi
+          state=$(gh run list --workflow ci.yml --commit "$GITHUB_SHA" --json conclusion --jq '[.[].conclusion] | if index("success") then "success" else (first // "none") end')
+          if [ "$state" != success ]; then
+            echo "::error::CI hasn't passed on $GITHUB_SHA (state: $state). Wait for it, or fix main first."; exit 1
+          fi
+
+      - name: Tag and create the release
+        run: |
+          flags=()
+          [ "${{ inputs.prerelease }}" = true ] && flags+=(--prerelease)
+          gh release create "v$VERSION" --target "$GITHUB_SHA" --title "lanjaeger $VERSION" --generate-notes "${flags[@]}"
+
+      - name: Build the appliance for this release
+        # A tag created with GITHUB_TOKEN doesn't trigger workflows by itself.
+        run: gh workflow run appliance.yml --ref "v$VERSION"
+
+      - name: Summary
+        run: |
+          {
+            echo "### lanjaeger $VERSION"
+            echo "- Release: ${{ github.server_url }}/${{ github.repository }}/releases/tag/v$VERSION"
+            echo "- The OVA is being built and will be attached in about 30 minutes (Actions → Appliance)."
+          } >> "$GITHUB_STEP_SUMMARY"
