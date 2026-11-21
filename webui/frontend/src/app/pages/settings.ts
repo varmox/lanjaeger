@@ -21,6 +21,12 @@ const GROUPS: { id: ConfigField['group']; title: string; note?: string }[] = [
     <h1>Settings</h1>
     <p>These values are written to <code>.env</code>. <code>CACHE_ROOT</code>, images and the web UI password can only be changed in the file.</p>
 
+    @for (w of warnings(); track w) {
+      <div class="alert alert-warning" role="alert">
+        <div class="alert-items"><div class="alert-item static"><span class="alert-text">{{ w }}</span></div></div>
+      </div>
+    }
+
     @if (fields().length) {
       <form class="clr-form clr-form-horizontal" (ngSubmit)="save()" novalidate>
         @for (g of groups; track g.id) {
@@ -75,6 +81,7 @@ export class SettingsPage {
   protected values: Record<string, string> = {};
   protected readonly errors = signal<Record<string, string>>({});
   protected readonly message = signal('');
+  protected readonly warnings = signal<string[]>([]);
   protected readonly busy = signal(false);
   protected readonly job = signal<Job | null>(null);
   private readonly confirmApply = viewChild.required<ConfirmDialog>('confirmApply');
@@ -95,8 +102,9 @@ export class SettingsPage {
 
   private async load() {
     try {
-      const { fields } = await this.api.config();
+      const { fields, warnings } = await this.api.config();
       this.fields.set(fields);
+      this.warnings.set(warnings ?? []);
       this.values = Object.fromEntries(fields.map((f) => [f.key, f.value]));
     } catch (e) {
       this.message.set(errorMessage(e));
@@ -108,7 +116,8 @@ export class SettingsPage {
     this.errors.set({});
     this.message.set('');
     try {
-      const { changed } = await this.api.saveConfig(this.values);
+      const { changed, warnings } = await this.api.saveConfig(this.values);
+      this.warnings.set(warnings ?? []);
       if (!changed.length) {
         this.message.set('Nothing changed.');
         return;

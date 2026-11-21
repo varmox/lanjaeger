@@ -47,10 +47,34 @@ def _optional_ipv4(v: str) -> str:
     return _ipv4(v) if v else ""
 
 
+def _optional_ipv6(v: str) -> str:
+    return str(ipaddress.IPv6Address(v)) if v else ""
+
+
+def warnings(values: dict[str, str]) -> list[str]:
+    """Settings that are valid but will cause trouble at a LAN party."""
+    out = []
+    for ip in values.get("LANCACHE_IP", "").split():
+        try:
+            if not ipaddress.IPv4Address(ip).is_private:
+                out.append(f"LANCACHE_IP {ip} is a public address. Origin/EA and Riot only fall back to cacheable "
+                           "downloads when the cache has a private IP (192.168.x, 10.x, 172.16–31.x).")
+        except ValueError:
+            pass
+    dns = values.get("DNS_BIND_IP", "")
+    upstream = [u for u in re.split(r"[;\s]+", values.get("UPSTREAM_DNS", "")) if u]
+    if dns and dns in upstream:
+        out.append(f"UPSTREAM_DNS contains {dns}, lanjaeger's own DNS address — that's a loop. "
+                   "Use your router or a public resolver instead.")
+    return out
+
+
 FIELDS: dict[str, dict] = {
     "LANCACHE_IP": {"group": "network", "check": lambda v: " ".join(_ip_list(r"\s+")(v)),
                     "help": "IP(s) clients download from, space-separated"},
     "DNS_BIND_IP": {"group": "network", "check": _ipv4, "help": "IP the DNS server listens on"},
+    "DNS_BIND_IP6": {"group": "network", "check": _optional_ipv6,
+                     "help": "Optional IPv6 address for DNS too (needs docker-compose.ipv6.yml, see NETWORK.md)"},
     "CACHE_BIND_IP": {"group": "network", "check": _optional_ipv4,
                       "help": "Bind HTTP/HTTPS to one IP (empty = all)"},
     "UPSTREAM_DNS": {"group": "network", "check": lambda v: "; ".join(_ip_list(r"[;\s]+")(v)),

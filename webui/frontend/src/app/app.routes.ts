@@ -19,6 +19,8 @@ const canAdmin: CanActivateFn = async () => {
 
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
+  // Public on purpose: players open it to test their own device.
+  { path: 'check', title: 'Is my device using the cache? · lanjaeger', loadComponent: () => import('./pages/check').then((m) => m.CheckPage) },
   { path: 'login', title: 'Sign in · lanjaeger', loadComponent: () => import('./pages/login').then((m) => m.LoginPage) },
   { path: 'dashboard', title: 'Dashboard · lanjaeger', canActivate: [canRead], loadComponent: () => import('./pages/dashboard').then((m) => m.DashboardPage) },
   { path: 'clients', title: 'Clients · lanjaeger', canActivate: [canRead], loadComponent: () => import('./pages/clients').then((m) => m.ClientsPage) },

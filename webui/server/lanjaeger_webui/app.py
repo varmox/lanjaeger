@@ -24,14 +24,16 @@ from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import adblock, alerts, disk, dnsentries, docker_api, envfile, prefill
+from . import adblock, alerts, checkdns, disk, dnsentries, docker_api, envfile, prefill
 from .auth import COOKIE, SESSION_TTL, Auth, csrf_ok
 from .jobs import MANAGED, JobRunner
 from .stats import LogFollower, Stats
 
-# Steam capsule images come from Steam's CDN (prefill game picker).
+# Steam capsule images come from Steam's CDN (prefill game picker); the
+# client check page probes one-time names in the check zone.
 CSP = ("default-src 'self'; img-src 'self' data: https://cdn.akamai.steamstatic.com; font-src 'self' data:; style-src 'self' 'unsafe-inline'; "
-       "script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+       f"script-src 'self'; connect-src 'self' http://*.{checkdns.ZONE}:*; "
+       "frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
 MAX_BODY = 64 * 1024
 
 
@@ -52,6 +54,13 @@ class Context:
         self.prefill = prefill.Runner(self.project_dir, self.project, self.env_path) if self.project_dir else None
         self.logins = {s: prefill.Login(self.prefill, s) for s in prefill.Login.COMMANDS} if self.prefill else {}
         self.alerts = alerts.Alerts(self.project_dir, self.project, self.cache_dir, self.prefill) if self.project_dir else None
+        self.checks = checkdns.Store()
+
+    def check_answer_ip(self) -> str | None:
+        """Where players reach the web UI: WEBUI_BIND_IP, else DNS_BIND_IP."""
+        env = envfile.read(self.env_path) if self.env_path else {}
+        ip = env.get("WEBUI_BIND_IP") or ""
+        return ip if ip and ip != "0.0.0.0" else env.get("DNS_BIND_IP") or None
 
     def start_background(self):
         LogFollower(os.path.join(self.log_dir, "access.log"), self.stats).start()
@@ -62,6 +71,13 @@ class Context:
             threading.Thread(target=self.prefill.run_scheduler, daemon=True, name="prefill-schedule").start()
         if self.alerts:
             self.alerts.start()
+        try:
+            port = int(os.environ.get("CHECK_DNS_PORT", "5353"))
+            responder = checkdns.Responder(self.checks, self.check_answer_ip, port)
+            responder.bind()
+            responder.start()
+        except OSError as exc:
+            print(f"check DNS responder disabled: {exc}", file=sys.stderr)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -137,6 +153,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._error(403, "cross-site request refused")
         routes = [
             ("GET", r"/api/session", self.session, "none"),
+            ("POST", r"/api/check/start", self.post_check_start, "none"),
+            ("GET", r"/api/check/result/([0-9a-f]{16})", self.get_check_result, "none"),
+            ("GET", r"/api/check/ping", self.get_check_ping, "none"),
             ("POST", r"/api/login", self.login, "none"),
             ("POST", r"/api/logout", self.logout, "none"),
             ("GET", r"/api/stats", self.get_stats, "read"),
@@ -261,7 +280,8 @@ class Handler(BaseHTTPRequestHandler):
     def get_config(self):
         if not self.ctx.env_path or not os.path.exists(self.ctx.env_path):
             return self._error(404, ".env not found — is PROJECT_DIR mounted?")
-        self._json(200, {"fields": envfile.editable(self.ctx.env_path)})
+        self._json(200, {"fields": envfile.editable(self.ctx.env_path),
+                         "warnings": envfile.warnings(envfile.read(self.ctx.env_path))})
 
     def put_config(self):
         changes = self._body().get("values")
@@ -271,7 +291,25 @@ class Handler(BaseHTTPRequestHandler):
         if errors:
             return self._error(422, "invalid values", fields=errors)
         changed = envfile.write(self.ctx.env_path, clean)
-        self._json(200, {"changed": changed})
+        self._json(200, {"changed": changed, "warnings": envfile.warnings(envfile.read(self.ctx.env_path))})
+
+    # ── client check (public) ─────────────────────────────────────────
+
+    def post_check_start(self):
+        check = self.ctx.checks.new_check(self._client_ip())
+        self._json(200, {"id": check["id"], "hosts": [f"{n}.{checkdns.ZONE}" for n in check["nonces"]]})
+
+    def get_check_result(self, check_id):
+        r = self.ctx.checks.result(check_id)
+        if r is None:
+            return self._error(404, "unknown or expired check")
+        env = envfile.read(self.ctx.env_path) if self.ctx.env_path else {}
+        self._json(200, {**r, "clientIsIpv6": ":" in r["client"],
+                         "dnsServer": env.get("DNS_BIND_IP"), "dnsServer6": env.get("DNS_BIND_IP6") or None})
+
+    def get_check_ping(self):
+        # Reached via a probe name; lets the page's fetch succeed cross-origin.
+        self._headers(204, "text/plain", 0, {"Access-Control-Allow-Origin": "*", "Cache-Control": "no-store"})
 
     # ── ad blocking ───────────────────────────────────────────────────
 

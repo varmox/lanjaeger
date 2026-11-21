@@ -158,6 +158,15 @@ export interface Alerts {
 /** Placeholder the server sends instead of a stored secret; send it back to keep it. */
 export const SECRET_PLACEHOLDER = '__unchanged__';
 
+export interface CheckResult {
+  total: number;
+  seen: number;
+  client: string;
+  clientIsIpv6: boolean;
+  dnsServer: string | null;
+  dnsServer6: string | null;
+}
+
 export interface DnsEntry {
   name: string;
   ip: string;
@@ -227,11 +236,19 @@ export class Api {
   }
 
   config() {
-    return firstValueFrom(this.http.get<{ fields: ConfigField[] }>('/api/config'));
+    return firstValueFrom(this.http.get<{ fields: ConfigField[]; warnings: string[] }>('/api/config'));
   }
 
   saveConfig(values: Record<string, string>) {
-    return firstValueFrom(this.http.put<{ changed: string[] }>('/api/config', { values }));
+    return firstValueFrom(this.http.put<{ changed: string[]; warnings: string[] }>('/api/config', { values }));
+  }
+
+  checkStart() {
+    return firstValueFrom(this.http.post<{ id: string; hosts: string[] }>('/api/check/start', {}));
+  }
+
+  checkResult(id: string) {
+    return firstValueFrom(this.http.get<CheckResult>(`/api/check/result/${id}`));
   }
 
   startJob(action: Job['action']) {

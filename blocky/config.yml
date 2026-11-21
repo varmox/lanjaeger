@@ -56,6 +56,13 @@ blocking:
 rebindingProtection:
   enable: false
 
+# The web UI's "Is my device using the cache?" check: only this private zone
+# is forwarded to the web UI's tiny DNS responder, so no other lookup is
+# ever seen by it. Without the web UI these names simply fail to resolve.
+conditional:
+  mapping:
+    check.lanjaeger.internal: webui:5353
+
 # Your own DNS entries (web UI → DNS entries, or edit hosts.txt).
 # Re-read every minute, so changes apply without restarting DNS.
 # Exact names only (no wildcards/CNAMEs); answered before lancache-dns,

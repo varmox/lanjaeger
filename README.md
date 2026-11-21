@@ -21,7 +21,7 @@ docker compose up -d
 docker compose ps    # dns and monolithic should turn "healthy" within ~2 minutes
 ```
 
-Then make your clients use the cache's DNS: hand out `DNS_BIND_IP` as the DNS server in your router's DHCP settings. Alternatively, load the [uklans/cache-domains](https://github.com/uklans/cache-domains) lists into your existing DNS (Pi-hole, Unbound, …).
+Then make your clients use the cache's DNS: hand out `DNS_BIND_IP` as the **only** DNS server in your router's DHCP settings. Before a LAN party, go through **[NETWORK.md](NETWORK.md)**: IPv6 DNS, switches, uplink and the other network things that decide whether the cache actually gets used.
 
 Once everything works, set `RESTART_POLICY=unless-stopped` in `.env` and run `docker compose up -d` again so the stack survives reboots.
 
@@ -124,6 +124,10 @@ Stats come from the cache's `access.log`. After a restart the UI replays the las
 ```
 
 ## Checking it works
+
+With the web UI, open `http://<server>:8080/check` on any device. It says in plain words whether that device's downloads go through the cache, and what to fix if not: a second DNS server, IPv6 DNS from the router, the browser's own encrypted DNS. No sign-in needed, so players can run it themselves.
+
+By hand:
 
 ```bash
 # From a client: should return LANCACHE_IP

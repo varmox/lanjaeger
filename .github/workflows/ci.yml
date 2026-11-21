@@ -14,11 +14,12 @@ jobs:
       - name: Shell scripts
         run: shellcheck update.sh scripts/rotate-logs.sh
 
-      - name: Compose file (with and without the web UI)
+      - name: Compose file (with and without the web UI, and with IPv6 DNS)
         run: |
           cp .env.example .env
           docker compose config --quiet
           COMPOSE_PROFILES=webui docker compose config --quiet
+          DNS_BIND_IP6=fd00::10 docker compose -f docker-compose.yml -f docker-compose.ipv6.yml config --quiet
 
       - name: Blocky config
         run: |
@@ -78,3 +79,52 @@ jobs:
           for i in $(seq 1 20); do curl -fsS http://127.0.0.1:18080/api/session && break; sleep 1; done
           curl -fsS http://127.0.0.1:18080/ | grep -q '<lj-root>'
           docker logs lj
+
+  # The real DNS path: Blocky → lancache-dns, plus the web UI's check zone
+  # and DNS entries. (Monolithic is left out: the runner can't spare 80/443.)
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Start blocky, lancache-dns and the web UI
+        run: |
+          cp .env.example .env
+          sed -i -e 's/^LANCACHE_IP=.*/LANCACHE_IP=192.168.1.10/' -e 's/^DNS_BIND_IP=.*/DNS_BIND_IP=127.0.0.1/' \
+                 -e 's/^WEBUI_PASSWORD=.*/WEBUI_PASSWORD=ci/' -e 's/^WEBUI_PORT=.*/WEBUI_PORT=18080/' \
+                 -e 's/^#COMPOSE_PROFILES=webui/COMPOSE_PROFILES=webui/' .env
+          docker compose up -d --build blocky dns webui
+          for i in $(seq 1 90); do
+            [ "$(dig +short +time=1 +tries=1 @127.0.0.1 lancache.steamcontent.com)" = 192.168.1.10 ] && break; sleep 2
+          done
+
+      - name: Game domains resolve to the cache
+        run: |
+          test "$(dig +short @127.0.0.1 lancache.steamcontent.com)" = 192.168.1.10
+          dig +short @127.0.0.1 github.com | grep -q .     # everything else is forwarded
+
+      - name: Client check (DNS responder via Blocky's conditional zone)
+        run: |
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:18080/api/session >/dev/null && break; sleep 2; done
+          start=$(curl -fsS -X POST -H 'X-Lanjaeger: 1' http://127.0.0.1:18080/api/check/start)
+          id=$(echo "$start" | jq -r .id)
+          for h in $(echo "$start" | jq -r '.hosts[]'); do
+            test "$(dig +short @127.0.0.1 "$h")" = 127.0.0.1      # answered with the web UI's address
+          done
+          curl -fsS "http://127.0.0.1:18080/api/check/result/$id" | tee /dev/stderr | jq -e '.seen == .total'
+
+      - name: DNS entries apply without restarting DNS
+        run: |
+          curl -fsS -c jar -X POST -H 'X-Lanjaeger: 1' -H 'Content-Type: application/json' \
+            -d '{"password":"ci"}' http://127.0.0.1:18080/api/login
+          curl -fsS -b jar -X PUT -H 'X-Lanjaeger: 1' -H 'Content-Type: application/json' \
+            -d '{"entries":[{"name":"nas.lan","ip":"192.168.1.20","note":"ci"}]}' http://127.0.0.1:18080/api/dns/entries
+          for i in $(seq 1 50); do
+            [ "$(dig +short @127.0.0.1 nas.lan)" = 192.168.1.20 ] && exit 0; sleep 3
+          done
+          echo "nas.lan never resolved"; exit 1
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --tail 80

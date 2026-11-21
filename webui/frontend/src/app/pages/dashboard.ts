@@ -12,6 +12,7 @@ import { TrafficChart } from '../shared/traffic-chart';
   imports: [ClrDatagridModule, ClrIcon, BytesPipe, AgoPipe, TrafficChart],
   template: `
     <h1>Dashboard</h1>
+    <p class="lj-muted">Players can test their own device at <a class="lj-link" [href]="checkUrl">{{ checkUrl }}</a> — no sign-in needed.</p>
     @if (error()) {
       <div class="alert alert-danger" role="alert">
         <div class="alert-items"><div class="alert-item static"><span class="alert-text">{{ error() }}</span></div></div>
@@ -142,6 +143,7 @@ export class DashboardPage {
   protected readonly error = signal('');
   protected readonly adblock = signal<Adblock | null>(null);
   protected readonly activeAlerts = signal<{ title: string; severity: string }[]>([]);
+  protected readonly checkUrl = `${location.origin}/check`;
   protected readonly adblockShare = computed(() => {
     const s = this.adblock()?.summary;
     return s ? percent(s.blocked, s.queries) : '—';

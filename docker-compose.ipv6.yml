@@ -1,0 +1,18 @@
+# Optional: serve DNS on an IPv6 address too, so your router can announce
+# lanjaeger as the IPv6 DNS server (RDNSS / DHCPv6) instead of its own —
+# otherwise IPv6-capable devices may bypass the cache and the ad blocker.
+#
+# Enable in .env:
+#   DNS_BIND_IP6=<this server's IPv6 address on the LAN, e.g. fd00::10>
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.ipv6.yml
+#
+# Game downloads still go over IPv4: lancache-dns only answers IPv4 (A)
+# records for cached domains, which is exactly what keeps them on the cache.
+# Note: Docker relays these queries, so Blocky's stats show the Docker
+# gateway instead of the device for IPv6 clients.
+
+services:
+  blocky:
+    ports:
+      - "[${DNS_BIND_IP6:?set DNS_BIND_IP6 in .env}]:53:53/udp"
+      - "[${DNS_BIND_IP6}]:53:53/tcp"

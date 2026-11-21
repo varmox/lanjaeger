@@ -160,3 +160,15 @@ dialog::backdrop {
 .lj-lookup dt { font-weight: 600; }
 .lj-lookup dd { margin: 0; overflow-wrap: anywhere; }
 .lj-table-scroll { overflow-x: auto; }
+
+/* Client check page */
+.lj-check { max-inline-size: 46rem; }
+.lj-verdict { display: flex; gap: 1rem; align-items: flex-start; padding: 1.25rem; border-radius: 0.25rem; margin: 1rem 0; border: 1px solid; }
+.lj-verdict h2 { margin-top: 0; font-size: 1.25rem; }
+.lj-verdict p { margin-bottom: 0; }
+.lj-verdict.lj-ok { border-color: var(--cds-alias-status-success, #3c8500); }
+.lj-verdict.lj-partial { border-color: var(--cds-alias-status-warning-dark, #c25400); }
+.lj-verdict.lj-none { border-color: var(--cds-alias-status-danger, #c21d00); }
+.lj-verdict cds-icon { flex: none; }
+.lj-fix li { margin-bottom: 0.5rem; }
+.lj-inline-btn { padding: 0; margin: 0; min-height: 0; vertical-align: baseline; text-transform: none; font-size: inherit; letter-spacing: normal; }
