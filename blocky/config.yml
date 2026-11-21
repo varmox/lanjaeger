@@ -81,18 +81,14 @@ caching:
 statistics:
   enable: true
 
-# Prometheus counters (queries, blocked, cache) on the internal API port.
-# The web UI passes them on at its /metrics endpoint.
-prometheus:
-  enable: true
-  path: /metrics
-
 # Blocky's default would print every query of every device to its log —
 # a privacy problem and, over a weekend, a lot of disk. The statistics
 # above are in-memory aggregates and don't need it.
 queryLog:
   type: none
 
+# Prometheus counters on the internal API port (/metrics); the web UI
+# passes them on at its own /metrics endpoint.
 prometheus:
   enable: true
 
