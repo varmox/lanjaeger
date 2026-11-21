@@ -36,8 +36,9 @@ genisoimage -quiet -r -V "OVF ENV" -o "$T/ovf-env.iso" "$T/ovf-env.xml"
 
 qemu-img create -q -f qcow2 -F raw -b "$ROOT_IMG" "$T/root.qcow2"
 qemu-img create -q -f qcow2 "$T/cache.qcow2" 30G
-OVMF=$(ls /usr/share/OVMF/OVMF_CODE_4M.fd /usr/share/OVMF/OVMF_CODE.fd /usr/share/ovmf/OVMF.fd 2>/dev/null | head -1)
-VARS=$(ls /usr/share/OVMF/OVMF_VARS_4M.fd /usr/share/OVMF/OVMF_VARS.fd 2>/dev/null | head -1)
+first() { for f in "$@"; do [ -f "$f" ] && { echo "$f"; return; }; done; return 1; }
+OVMF=$(first /usr/share/OVMF/OVMF_CODE_4M.fd /usr/share/OVMF/OVMF_CODE.fd)
+VARS=$(first /usr/share/OVMF/OVMF_VARS_4M.fd /usr/share/OVMF/OVMF_VARS.fd)
 cp "$VARS" "$T/vars.fd"
 ACCEL=tcg; [ -w /dev/kvm ] && ACCEL=kvm
 echo "booting with $ACCEL"

@@ -19,7 +19,7 @@ POI_IMAGE=lanjaeger-poi:$POI_VERSION
 say() { printf '\n==> %s\n' "$*"; }
 
 rm -rf "$WORK"
-mkdir -p "$WORK/images" "$WORK/repo" "$WORK/files"
+mkdir -p "$WORK/images" "$WORK/files"
 
 say "Photon OS installer container ($POI_VERSION)"
 if ! docker image inspect "$POI_IMAGE" >/dev/null 2>&1; then
@@ -55,11 +55,13 @@ cp files/* "$WORK/files/"
 { cat lanjaeger_ks.yaml; printf '\ndocker:\n    images:\n'; cat "$WORK/docker-images.yaml"; } > "$WORK/lanjaeger_ks.yaml"
 
 poi() {
-	docker run --rm --privileged -v /dev:/dev -v "$WORK:/workdir" -v "$WORK/repo:/repo" -w /workdir "$POI_IMAGE" "$@"
+	docker run --rm --privileged -v /dev:/dev -v "$WORK:/workdir" -w /workdir "$POI_IMAGE" "$@"
 }
 
 say "Installing Photon OS into the disk image"
-poi create-image -c lanjaeger_ks.yaml -v 5.0
+# Empty --repo-paths: use the online Photon repos from the kickstart
+# (create-image's default, /repo, would replace them).
+poi create-image -c lanjaeger_ks.yaml -v 5.0 --repo-paths=
 
 say "Packaging the OVA"
 poi create-ova --installer-config lanjaeger_ks.yaml --ova-config lanjaeger_ova.yaml \

@@ -13,6 +13,8 @@ It runs the official `lancachenet/lancache-dns` and `lancachenet/monolithic` ima
 
 ## Quick start
 
+**Prefer a ready-made VM?** Deploy the [Photon OS appliance (OVA)](appliance/README.md) on vSphere/ESXi. Network, passwords and options are set in the deployment wizard. Otherwise, on any Linux host with Docker:
+
 ```bash
 git clone https://github.com/varmox/lanjaeger.git && cd lanjaeger
 cp .env.example .env
