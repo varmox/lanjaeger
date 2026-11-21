@@ -1,0 +1,449 @@
+#!/usr/bin/env python3
+"""lanjaeger appliance setup: applies the deployment options (OVF properties).
+
+    lanjaeger-setup early   before networking: hostname, network, time, root
+                            password, SSH, cache disk
+    lanjaeger-setup late    after networking: lanjaeger's .env, firewall,
+                            console banner
+    lanjaeger-setup up      start the stack (docker compose up -d)
+
+Runs on every boot, so options changed in vSphere (VM → Configure → vApp
+Options, while powered off) take effect at the next start. Settings changed
+later in the web UI are kept: a key in .env is only rewritten when the value
+the appliance derives for it changed since the last boot.
+
+The options come from the OVF environment: VMware Tools (guestinfo.ovfEnv),
+an ovf-env.xml on a CD-ROM (ISO transport), or /etc/lanjaeger/ovf-env.xml.
+"""
+
+from __future__ import annotations
+
+import glob
+import grp
+import hashlib
+import ipaddress
+import json
+import os
+import re
+import secrets
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+import xml.etree.ElementTree as ET
+
+PROJECT = "/opt/lanjaeger"
+ENV_PATH = f"{PROJECT}/.env"
+CACHE_MOUNT = "/srv/lancache"
+CACHE_LABEL = "lj-cache"
+STATE_PATH = "/var/lib/lanjaeger/applied.json"
+NETWORK_FILE = "/etc/systemd/network/10-lanjaeger.network"
+OVF_ENV_FILE = "/etc/lanjaeger/ovf-env.xml"
+OE = "{http://schemas.dmtf.org/ovf/environment/1}"
+
+DEFAULTS = {
+    "hostname": "lanjaeger",
+    "root_password": "",
+    "ssh": "false",
+    "timezone": "UTC",
+    "ip": "",
+    "prefix": "24",
+    "gateway": "",
+    "dns": "1.1.1.1 9.9.9.9",
+    "domain": "",
+    "ntp": "pool.ntp.org",
+    "upstream_dns": "",
+    "cache_size": "",
+    "adblock": "true",
+    "webui_password": "",
+    "public_dashboard": "false",
+    "monitoring": "false",
+    "grafana_password": "",
+    "metrics_token": "",
+}
+
+
+def log(msg: str) -> None:
+    print(f"lanjaeger-setup: {msg}", flush=True)
+
+
+def run(*cmd: str, check: bool = True, **kw) -> subprocess.CompletedProcess:
+    return subprocess.run(cmd, check=check, text=True, capture_output=True, **kw)
+
+
+def write(path: str, text: str, mode: int = 0o644) -> bool:
+    """Write if different; returns True when the file changed."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            if f.read() == text:
+                return False
+    except FileNotFoundError:
+        pass
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path + ".tmp", "w", encoding="utf-8") as f:
+        f.write(text)
+    os.chmod(path + ".tmp", mode)
+    os.replace(path + ".tmp", path)
+    return True
+
+
+def truthy(v: str) -> bool:
+    return v.strip().lower() in ("true", "1", "yes", "on")
+
+
+def words(v: str) -> list[str]:
+    return [w for w in re.split(r"[\s,;]+", v.strip()) if w]
+
+
+# ── OVF environment ────────────────────────────────────────────────────
+
+
+def parse_ovf_env(xml: str) -> dict[str, str]:
+    out = {}
+    for el in ET.fromstring(xml).iter():
+        if el.tag.endswith("Property") and f"{OE}key" in el.attrib:
+            key = el.attrib[f"{OE}key"]
+            if key.startswith("lanjaeger."):
+                out[key[len("lanjaeger."):]] = el.attrib.get(f"{OE}value", "")
+    return out
+
+
+def read_ovf_env() -> tuple[dict[str, str], str]:
+    try:
+        r = run("vmtoolsd", "--cmd", "info-get guestinfo.ovfEnv", check=False, timeout=15)
+        if r.returncode == 0 and "<" in r.stdout:
+            return parse_ovf_env(r.stdout), "VMware Tools"
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    for dev in sorted(glob.glob("/dev/sr*")):
+        with tempfile.TemporaryDirectory() as mnt:
+            if run("mount", "-o", "ro", dev, mnt, check=False).returncode != 0:
+                continue
+            try:
+                path = os.path.join(mnt, "ovf-env.xml")
+                if os.path.exists(path):
+                    with open(path, encoding="utf-8") as f:
+                        return parse_ovf_env(f.read()), dev
+            finally:
+                run("umount", mnt, check=False)
+    if os.path.exists(OVF_ENV_FILE):
+        with open(OVF_ENV_FILE, encoding="utf-8") as f:
+            return parse_ovf_env(f.read()), OVF_ENV_FILE
+    return {}, "defaults"
+
+
+def options() -> dict[str, str]:
+    props, source = read_ovf_env()
+    log(f"options from {source}")
+    return {k: (props.get(k) if props.get(k) is not None else v).strip() for k, v in DEFAULTS.items()}
+
+
+def load_state() -> dict:
+    try:
+        with open(STATE_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def save_state(state: dict) -> None:
+    write(STATE_PATH, json.dumps(state, indent=1), 0o600)
+
+
+def digest(v: str) -> str:
+    return hashlib.sha256(v.encode()).hexdigest()
+
+
+# ── early: system ──────────────────────────────────────────────────────
+
+
+def static_network(o: dict) -> tuple[str, str] | None:
+    """(address/prefix, gateway) if a valid static IP is configured."""
+    if not o["ip"]:
+        return None
+    try:
+        iface = ipaddress.IPv4Interface(f"{o['ip']}/{o['prefix'] or 24}")
+        gw = str(ipaddress.IPv4Address(o["gateway"])) if o["gateway"] else ""
+    except ValueError as exc:
+        log(f"invalid network settings ({exc}); falling back to DHCP")
+        return None
+    return str(iface), gw
+
+
+def setup_network(o: dict) -> None:
+    lines = ["# Written by lanjaeger-setup from the deployment options.", "[Match]", "Name=e*", "", "[Network]"]
+    static = static_network(o)
+    if static:
+        addr, gw = static
+        lines.append(f"Address={addr}")
+        if gw:
+            lines.append(f"Gateway={gw}")
+        lines += [f"DNS={d}" for d in words(o["dns"])]
+        if o["domain"]:
+            lines.append(f"Domains={o['domain']}")
+    else:
+        lines.append("DHCP=ipv4")
+    lines.append("")
+    if write(NETWORK_FILE, "\n".join(lines)):
+        log(f"network: {'static ' + static[0] if static else 'DHCP'}")
+        run("networkctl", "reload", check=False)
+
+
+def setup_hostname(o: dict) -> None:
+    name = o["hostname"] or "lanjaeger"
+    if not re.fullmatch(r"[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9-]+)*", name):
+        log(f"invalid hostname {name!r}, using lanjaeger")
+        name = "lanjaeger"
+    write("/etc/hostname", name + "\n")
+    run("hostname", name.split(".")[0], check=False)
+
+
+def setup_time(o: dict) -> None:
+    tz = o["timezone"] or "UTC"
+    zone = os.path.join("/usr/share/zoneinfo", tz)
+    if ".." in tz or not os.path.isfile(zone):
+        log(f"unknown time zone {tz!r}, using UTC")
+        zone = "/usr/share/zoneinfo/UTC"
+    if os.path.realpath("/etc/localtime") != os.path.realpath(zone):
+        try:
+            os.remove("/etc/localtime")
+        except FileNotFoundError:
+            pass
+        os.symlink(zone, "/etc/localtime")
+    servers = " ".join(words(o["ntp"]))
+    write("/etc/systemd/timesyncd.conf.d/lanjaeger.conf", f"[Time]\nNTP={servers}\n")
+
+
+def setup_root_password(o: dict, state: dict) -> None:
+    pw = o["root_password"]
+    if not pw or state.get("root_password") == digest(pw):
+        return
+    run("chpasswd", input=f"root:{pw}\n")
+    run("chage", "-I", "-1", "-m", "0", "-M", "99999", "-E", "-1", "-d", time.strftime("%Y-%m-%d"), "root")
+    state["root_password"] = digest(pw)
+    log("root password set")
+
+
+def setup_ssh(o: dict) -> None:
+    if truthy(o["ssh"]):
+        conf = "/etc/ssh/sshd_config"
+        with open(conf, encoding="utf-8") as f:
+            text = f.read()
+        new = re.sub(r"(?m)^#?\s*PermitRootLogin\s+.*$", "PermitRootLogin yes", text)
+        if "PermitRootLogin yes" not in new:
+            new += "\nPermitRootLogin yes\n"
+        write(conf, new, 0o600)
+        run("systemctl", "enable", "sshd.service", check=False)
+        run("systemctl", "start", "--no-block", "sshd.service", check=False)
+    else:
+        run("systemctl", "disable", "sshd.service", check=False)
+        run("systemctl", "stop", "--no-block", "sshd.service", check=False)
+
+
+def root_disk() -> str | None:
+    src = run("findmnt", "-n", "-o", "SOURCE", "/").stdout.strip()
+    parent = run("lsblk", "-n", "-o", "PKNAME", src, check=False).stdout.strip()
+    return parent.splitlines()[0] if parent else None
+
+
+def cache_device() -> str | None:
+    """The cache disk: our labelled filesystem, else the first empty disk
+    that isn't the system disk."""
+    r = run("blkid", "-L", CACHE_LABEL, check=False)
+    if r.returncode == 0 and r.stdout.strip():
+        return r.stdout.strip()
+    system = root_disk()
+    disks = json.loads(run("lsblk", "-J", "-d", "-o", "NAME,TYPE,RO").stdout)["blockdevices"]
+    for d in sorted(disks, key=lambda d: d["name"]):
+        if d["type"] != "disk" or d["name"] == system or d["ro"] in (True, "1"):
+            continue
+        dev = f"/dev/{d['name']}"
+        children = run("lsblk", "-n", "-o", "NAME", dev).stdout.split()
+        if len(children) > 1 or run("blkid", dev, check=False).stdout.strip():
+            log(f"{dev} has partitions or data — not touching it")
+            continue
+        log(f"formatting {dev} as the cache disk (XFS)")
+        run("mkfs.xfs", "-f", "-L", CACHE_LABEL, dev)
+        return dev
+    return None
+
+
+def setup_cache_disk() -> None:
+    os.makedirs(CACHE_MOUNT, exist_ok=True)
+    dev = cache_device()
+    if not dev:
+        log(f"no cache disk found — the cache uses the system disk ({CACHE_MOUNT})")
+        return
+    with open("/etc/fstab", encoding="utf-8") as f:
+        fstab = f.read()
+    if f"LABEL={CACHE_LABEL}" not in fstab:
+        write("/etc/fstab", fstab.rstrip("\n") + f"\nLABEL={CACHE_LABEL} {CACHE_MOUNT} xfs defaults,noatime,nofail 0 0\n")
+        run("systemctl", "daemon-reload", check=False)
+    if run("mountpoint", "-q", CACHE_MOUNT, check=False).returncode != 0:
+        run("mount", CACHE_MOUNT)
+    # A disk enlarged in vSphere: use the new space.
+    run("xfs_growfs", CACHE_MOUNT, check=False)
+
+
+def early() -> None:
+    o, state = options(), load_state()
+    for step in (lambda: setup_hostname(o), lambda: setup_network(o), lambda: setup_time(o),
+                 lambda: setup_root_password(o, state), lambda: setup_ssh(o), setup_cache_disk):
+        try:
+            step()
+        except (OSError, subprocess.CalledProcessError, ValueError) as exc:
+            log(f"step failed: {exc}")
+    save_state(state)
+
+
+# ── late: lanjaeger ────────────────────────────────────────────────────
+
+
+def current_ip(timeout: int = 90) -> str | None:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        out = run("ip", "-4", "-o", "addr", "show", "scope", "global", check=False).stdout
+        for line in out.splitlines():
+            m = re.search(r"\binet (\d+\.\d+\.\d+\.\d+)/", line)
+            if m and not re.match(r"\d+: (docker|br-|veth)", line):
+                return m[1]
+        time.sleep(2)
+    return None
+
+
+def dhcp_dns() -> list[str]:
+    """DNS servers learned via DHCP (systemd-resolved's upstream list)."""
+    try:
+        with open("/run/systemd/resolve/resolv.conf", encoding="utf-8") as f:
+            return [m[1] for m in re.finditer(r"(?m)^nameserver\s+(\d+\.\d+\.\d+\.\d+)", f.read())]
+    except FileNotFoundError:
+        return []
+
+
+def env_set(text: str, key: str, value: str) -> str:
+    line = f"{key}={value}"
+    pattern = re.compile(rf"(?m)^#?\s*{re.escape(key)}=.*$")
+    if pattern.search(text):
+        return pattern.sub(lambda _: line, text, count=1)
+    return text.rstrip("\n") + f"\n{line}\n"
+
+
+def desired_env(o: dict, state: dict, ip: str) -> dict[str, str]:
+    st = os.statvfs(CACHE_MOUNT)
+    auto_gb = max(10, int(st.f_blocks * st.f_frsize / 2**30 * 0.9))
+    size = o["cache_size"]
+    size = f"{int(size)}g" if size.isdigit() and int(size) > 0 else f"{auto_gb}g"
+    upstream = words(o["upstream_dns"]) or (words(o["dns"]) if static_network(o) else dhcp_dns()) or ["1.1.1.1"]
+    upstream = [u for u in upstream if u != ip] or ["1.1.1.1"]
+
+    webui_pw = o["webui_password"] or state.setdefault("generated_webui_password", secrets.token_urlsafe(12))
+    monitoring = truthy(o["monitoring"])
+    token = o["metrics_token"]
+    if not token and monitoring:
+        token = state.setdefault("generated_metrics_token", secrets.token_hex(24))
+    try:
+        docker_gid = str(grp.getgrnam("docker").gr_gid)
+    except KeyError:
+        docker_gid = "999"
+    return {
+        "LANCACHE_IP": ip,
+        "DNS_BIND_IP": ip,
+        "UPSTREAM_DNS": "; ".join(upstream),
+        "CACHE_ROOT": CACHE_MOUNT,
+        "CACHE_DISK_SIZE": size,
+        "ADBLOCK_ENABLED": "true" if truthy(o["adblock"]) else "false",
+        "RESTART_POLICY": "unless-stopped",
+        "TZ": o["timezone"] or "UTC",
+        "COMPOSE_PROFILES": "webui,monitoring" if monitoring else "webui",
+        "WEBUI_PASSWORD": webui_pw,
+        "WEBUI_PUBLIC_DASHBOARD": "true" if truthy(o["public_dashboard"]) else "false",
+        "METRICS_TOKEN": token,
+        "GRAFANA_PASSWORD": o["grafana_password"],
+        "DOCKER_GID": docker_gid,
+    }
+
+
+def setup_env(o: dict, state: dict, ip: str) -> None:
+    want = desired_env(o, state, ip)
+    applied = state.get("env", {})
+    first = not os.path.exists(ENV_PATH)
+    if first:
+        shutil.copyfile(f"{PROJECT}/.env.example", ENV_PATH)
+    with open(ENV_PATH, encoding="utf-8") as f:
+        text = f.read()
+    changed = []
+    for key, value in want.items():
+        if first or applied.get(key) != value:
+            text = env_set(text, key, value)
+            changed.append(key)
+    if changed:
+        write(ENV_PATH, text, 0o600)
+        log(f".env: set {', '.join(changed)}")
+    state["env"] = want
+
+
+def setup_firewall(o: dict) -> None:
+    # Photon's firewall drops incoming traffic by default. Docker opens the
+    # ports it publishes itself; Grafana runs on the host network.
+    rules = [["-p", "icmp", "-j", "ACCEPT"]]
+    if truthy(o["monitoring"]):
+        rules.append(["-p", "tcp", "--dport", "3000", "-j", "ACCEPT"])
+    for rule in rules:
+        if run("iptables", "-C", "INPUT", *rule, check=False).returncode != 0:
+            run("iptables", "-I", "INPUT", *rule, check=False)
+
+
+def setup_banner(o: dict, state: dict, ip: str | None) -> None:
+    host = ip or "<no IP address yet>"
+    lines = [
+        "",
+        "  lanjaeger appliance (Photon OS 5) - \\n",
+        "",
+        f"  Web UI ............ http://{host}:8080",
+        f"  Client check ...... http://{host}:8080/check",
+    ]
+    if truthy(o["monitoring"]):
+        lines.append(f"  Grafana ........... http://{host}:3000   (user admin)")
+    lines += [f"  DNS for players ... {host}   (hand this out as the only DNS server via DHCP)", ""]
+    if not o["webui_password"] and "generated_webui_password" in state:
+        lines += [f"  Web UI password: {state['generated_webui_password']}   (set one in the deployment options to hide this)", ""]
+    if not ip:
+        lines += ["  No IPv4 address: check the network settings (vApp options) and the VM's port group.", ""]
+    write("/etc/issue", "\n".join(lines) + "\n")
+    run("agetty", "--reload", check=False)
+
+
+def late() -> None:
+    o, state = options(), load_state()
+    static = static_network(o)
+    if static:
+        current_ip(30)                      # give networkd a moment
+        ip = static[0].split("/")[0]
+    else:
+        ip = current_ip()
+    if not ip:
+        log("no IPv4 address — lanjaeger can't be configured yet")
+    else:
+        try:
+            setup_env(o, state, ip)
+        except (OSError, ValueError) as exc:
+            log(f".env failed: {exc}")
+    setup_firewall(o)
+    setup_banner(o, state, ip)
+    save_state(state)
+
+
+def up() -> None:
+    if not os.path.exists(ENV_PATH):
+        log("no .env yet — not starting the stack")
+        return
+    compose = ["docker", "compose"] if run("docker", "compose", "version", check=False).returncode == 0 else ["docker-compose"]
+    env = {**os.environ, "PWD": PROJECT}
+    r = subprocess.run([*compose, "up", "-d", "--remove-orphans"], cwd=PROJECT, env=env)
+    sys.exit(r.returncode)
+
+
+if __name__ == "__main__":
+    phase = sys.argv[1] if len(sys.argv) > 1 else ""
+    {"early": early, "late": late, "up": up}.get(phase, lambda: sys.exit(__doc__))()

@@ -1,0 +1,14 @@
+[Unit]
+Description=lanjaeger stack (docker compose up)
+Requires=docker.service
+After=docker.service lanjaeger-setup-late.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/lanjaeger
+ExecStart=/usr/local/sbin/lanjaeger-setup up
+RemainAfterExit=yes
+TimeoutStartSec=900
+
+[Install]
+WantedBy=multi-user.target

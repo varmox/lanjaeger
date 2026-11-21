@@ -1,0 +1,74 @@
+# Photon OS 5 kickstart for the lanjaeger appliance, used by
+# photon-os-installer's create-image (see appliance/build.sh).
+# Reference: https://github.com/vmware/photon-os-installer/blob/master/docs/ks_config.md
+#
+# build.sh appends a "docker:" section that loads the stack's images, so the
+# appliance starts without downloading anything.
+
+hostname: lanjaeger
+
+# Replaced on first boot by the "Root password" deployment option; without
+# it, root's password is "lanjaeger" and must be changed at the first login.
+password:
+    crypted: false
+    text: lanjaeger
+    age: 0
+
+disks:
+    default:
+        filename: lanjaeger-root.img
+        size: 40960
+
+bootmode: efi
+
+partitions:
+    - mountpoint: /
+      size: 0
+      filesystem: ext4
+    - mountpoint: /boot
+      size: 256
+      filesystem: ext4
+    - size: 1024
+      filesystem: swap
+
+repos:
+    photon-release:
+        name: "Photon OS 5.0 release"
+        baseurl: https://packages.broadcom.com/photon/$releasever/photon_release_$releasever_$basearch/
+        enabled: 1
+        gpgcheck: 0
+    photon-updates:
+        name: "Photon OS 5.0 updates"
+        baseurl: https://packages.broadcom.com/photon/$releasever/photon_updates_$releasever_$basearch/
+        enabled: 1
+        gpgcheck: 0
+
+packagelist_file: packages_lanjaeger.json
+
+# The generic kernel: boots on ESXi (PVSCSI, vmxnet3) and other hypervisors.
+linux_flavor: linux
+
+additional_files:
+    - lanjaeger: /opt/lanjaeger
+    - files/lanjaeger-setup: /usr/local/sbin/lanjaeger-setup
+    - files/lanjaeger-setup-early.service: /etc/systemd/system/lanjaeger-setup-early.service
+    - files/lanjaeger-setup-late.service: /etc/systemd/system/lanjaeger-setup-late.service
+    - files/lanjaeger.service: /etc/systemd/system/lanjaeger.service
+
+services:
+    docker: enabled
+    vmtoolsd: enabled
+    systemd-timesyncd: enabled
+    # Off by default; the "Enable SSH" deployment option switches it on.
+    sshd: disabled
+
+postinstall:
+    - "#!/bin/sh"
+    - chmod 0755 /usr/local/sbin/lanjaeger-setup
+    - systemctl enable lanjaeger-setup-early.service lanjaeger-setup-late.service lanjaeger.service
+    - mkdir -p /srv/lancache /var/lib/lanjaeger
+    # Every deployed VM must get its own machine id (DHCP client id, logs).
+    - truncate -s 0 /etc/machine-id
+    - rm -f /var/lib/dbus/machine-id
+
+eject_cdrom: false

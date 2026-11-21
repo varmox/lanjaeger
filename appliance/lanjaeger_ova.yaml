@@ -1,0 +1,234 @@
+# OVA definition for the lanjaeger appliance, used by open-vmdk's
+# ova-compose (via photon-os-installer's create-ova, see appliance/build.sh).
+# Reference: https://github.com/vmware/open-vmdk#create-an-ova-with-ova-compose
+
+system:
+    name: lanjaeger
+    # vmx-14 = ESXi 6.7 and newer
+    type: vmx-14 vmx-19 vmx-20 vmx-21
+    os_vmw: vmwarePhoton64Guest
+    firmware: efi
+    secure_boot: false
+    default_configuration: medium
+
+networks:
+    lan:
+        name: "LAN"
+        description: "The LAN party network the players are on"
+
+configurations:
+    small:
+        label: "Small: 4 vCPU, 8 GB RAM"
+        description: "Up to about 20 players."
+    medium:
+        label: "Medium: 8 vCPU, 16 GB RAM"
+        description: "About 20 to 60 players."
+    large:
+        label: "Large: 16 vCPU, 32 GB RAM"
+        description: "60 players and more; Linux uses the extra RAM to serve popular games from memory."
+
+hardware:
+    cpus_small:
+        type: cpus
+        number: 4
+        configuration: small
+    cpus_medium:
+        type: cpus
+        number: 8
+        configuration: medium
+    cpus_large:
+        type: cpus
+        number: 16
+        configuration: large
+    memory_small:
+        type: memory
+        size: 8192
+        configuration: small
+    memory_medium:
+        type: memory
+        size: 16384
+        configuration: medium
+    memory_large:
+        type: memory
+        size: 32768
+        configuration: large
+    scsi1:
+        type: scsi_controller
+        subtype: VirtualSCSI
+    rootdisk:
+        type: hard_disk
+        parent: scsi1
+        disk_image: !param disk
+    # The game cache. Created empty (thin) at deployment; to make it bigger,
+    # edit "Hard disk 2" before the first power-on — or any time later: the
+    # appliance grows the filesystem on the next boot.
+    cachedisk:
+        type: hard_disk
+        parent: scsi1
+        disk_capacity: 500
+        units: GB
+    ethernet1:
+        type: ethernet
+        subtype: VmxNet3
+        network: lan
+    videocard1:
+        type: video_card
+    vmci1:
+        type: vmci
+
+environment:
+    transports:
+        - com.vmware.guestInfo
+        - iso
+    categories:
+        a_appliance: "1. Appliance"
+        b_network: "2. Network"
+        c_cache: "3. Cache and DNS"
+        d_webui: "4. Web UI"
+        e_monitoring: "5. Monitoring (Grafana)"
+    properties:
+        lanjaeger.hostname:
+            type: string
+            value: "lanjaeger"
+            user_configurable: true
+            label: "Hostname"
+            description: "Host name of the appliance."
+            category: a_appliance
+        lanjaeger.root_password:
+            type: string
+            password: true
+            value: ""
+            user_configurable: true
+            label: "Root password"
+            description: "Password for root on the console (and SSH, if enabled). Empty: \"lanjaeger\", which must be changed at the first login."
+            category: a_appliance
+        lanjaeger.ssh:
+            type: boolean
+            value: "False"
+            user_configurable: true
+            label: "Enable SSH"
+            description: "Allow root to log in over SSH with the root password."
+            category: a_appliance
+        lanjaeger.timezone:
+            type: string
+            value: "UTC"
+            user_configurable: true
+            label: "Time zone"
+            description: "tz database name, e.g. Europe/Zurich or America/New_York."
+            category: a_appliance
+
+        lanjaeger.ip:
+            type: string
+            value: ""
+            user_configurable: true
+            label: "IP address"
+            description: "Static IPv4 address of the appliance, e.g. 192.168.10.10. Strongly recommended: players' DHCP must hand out this address as their DNS server. Empty: DHCP (then reserve the address on your DHCP server)."
+            category: b_network
+        lanjaeger.prefix:
+            type: string
+            value: "24"
+            user_configurable: true
+            label: "Prefix length"
+            description: "Network size in CIDR notation: 24 = 255.255.255.0, 23 = 255.255.254.0. Ignored with DHCP."
+            category: b_network
+        lanjaeger.gateway:
+            type: string
+            value: ""
+            user_configurable: true
+            label: "Gateway"
+            description: "Default gateway, e.g. 192.168.10.1. Ignored with DHCP."
+            category: b_network
+        lanjaeger.dns:
+            type: string
+            value: "1.1.1.1 9.9.9.9"
+            user_configurable: true
+            label: "DNS servers"
+            description: "DNS servers the appliance itself uses, separated by spaces (your router, or public resolvers). Ignored with DHCP. Never the appliance's own address."
+            category: b_network
+        lanjaeger.domain:
+            type: string
+            value: ""
+            user_configurable: true
+            label: "Search domain"
+            description: "Optional DNS search domain, e.g. lan."
+            category: b_network
+        lanjaeger.ntp:
+            type: string
+            value: "pool.ntp.org"
+            user_configurable: true
+            label: "NTP servers"
+            description: "Time servers, separated by spaces."
+            category: b_network
+
+        lanjaeger.upstream_dns:
+            type: string
+            value: ""
+            user_configurable: true
+            label: "Upstream DNS for players"
+            description: "Where lanjaeger forwards players' DNS queries that aren't for game downloads, separated by spaces. Empty: the appliance's DNS servers."
+            category: c_cache
+        lanjaeger.cache_size:
+            type: string
+            value: ""
+            user_configurable: true
+            label: "Cache size limit (GB)"
+            description: "Maximum size of the game cache in GB. Empty: 90% of hard disk 2 (adjusts automatically when the disk is enlarged)."
+            category: c_cache
+        lanjaeger.adblock:
+            type: boolean
+            value: "True"
+            user_configurable: true
+            label: "Ad blocking"
+            description: "Block ads and trackers for every device that uses lanjaeger's DNS. Can be switched in the web UI later."
+            category: c_cache
+
+        lanjaeger.webui_password:
+            type: string
+            password: true
+            value: ""
+            user_configurable: true
+            label: "Web UI password"
+            description: "Password for the web UI (http://<IP>:8080). Empty: a random password, shown on the VM console."
+            category: d_webui
+        lanjaeger.public_dashboard:
+            type: boolean
+            value: "False"
+            user_configurable: true
+            label: "Public dashboard"
+            description: "Anyone on the LAN can view the statistics without signing in (controls always need the password)."
+            category: d_webui
+
+        lanjaeger.monitoring:
+            type: boolean
+            value: "False"
+            user_configurable: true
+            label: "Enable Grafana"
+            description: "Run Telegraf, Prometheus and Grafana on the appliance (http://<IP>:3000, user admin)."
+            category: e_monitoring
+        lanjaeger.grafana_password:
+            type: string
+            password: true
+            value: ""
+            user_configurable: true
+            label: "Grafana admin password"
+            description: "Empty: the web UI password."
+            category: e_monitoring
+        lanjaeger.metrics_token:
+            type: string
+            password: true
+            value: ""
+            user_configurable: true
+            label: "Metrics token"
+            description: "Token for http://<IP>:8080/metrics (for your own Prometheus or VCF Operations). Empty: generated when Grafana is enabled."
+            category: e_monitoring
+
+product:
+    product: lanjaeger
+    vendor: lanjaeger project
+    version: !param version=dev
+    full_version: !param version=dev
+
+annotation:
+    text: >
+      lanjaeger: lancache game download cache with ad-blocking DNS and a web UI, on Photon OS 5.
+      After power-on, the console shows the web UI address. Docs: https://github.com/varmox/lanjaeger

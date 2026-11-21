@@ -1,0 +1,74 @@
+name: Appliance
+
+# Builds the Photon OS 5 OVA, boots it in QEMU with deployment options and
+# checks the stack works. Tags (v*) also publish the OVA as a release asset.
+
+on:
+  push:
+    tags: ["v*"]
+    paths:
+      - appliance/**
+      - docker-compose.yml
+      - .env.example
+      - blocky/**
+      - monitoring/**
+      - webui/**
+      - .github/workflows/appliance.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  ova:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          df -h /
+
+      - name: Build the OVA
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then export VERSION=${GITHUB_REF_NAME#v}; else export VERSION=0.0.0-${GITHUB_SHA::7}; fi
+          appliance/build.sh
+          ls -l appliance/out
+
+      - name: Check the OVF descriptor
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq libxml2-utils >/dev/null
+          ova=$(ls appliance/out/*.ova)
+          tar -tvf "$ova"
+          tar -xOf "$ova" --wildcards '*.ovf' > lanjaeger.ovf
+          xmllint --noout lanjaeger.ovf
+          test "$(grep -c 'ovf:userConfigurable="true"' lanjaeger.ovf)" -ge 18
+          grep -q 'ovf:id="small"' lanjaeger.ovf && grep -q 'ovf:id="large"' lanjaeger.ovf
+          grep -q 'com.vmware.guestInfo' lanjaeger.ovf
+
+      - name: Boot test (QEMU)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm || true
+          sudo apt-get install -y -qq qemu-system-x86 qemu-utils ovmf genisoimage sshpass dnsutils >/dev/null
+          sudo chmod a+r appliance/out/work/lanjaeger-root.img
+          appliance/test-boot.sh appliance/out/work/lanjaeger-root.img
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: lanjaeger-ova
+          path: |
+            appliance/out/*.ova
+            appliance/out/*.sha256
+          compression-level: 0
+          retention-days: 14
+
+      - name: Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --generate-notes
+          gh release upload "$GITHUB_REF_NAME" appliance/out/*.ova appliance/out/*.sha256 --clobber

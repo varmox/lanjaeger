@@ -1,0 +1,15 @@
+[Unit]
+Description=lanjaeger: configure the stack from the deployment options
+After=lanjaeger-setup-early.service systemd-networkd.service network-online.target docker.service
+Wants=network-online.target
+Before=lanjaeger.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/lanjaeger-setup late
+RemainAfterExit=yes
+TimeoutStartSec=180
+StandardOutput=journal+console
+
+[Install]
+WantedBy=multi-user.target

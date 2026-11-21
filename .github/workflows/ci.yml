@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Shell scripts
-        run: shellcheck update.sh scripts/rotate-logs.sh
+        run: shellcheck update.sh scripts/rotate-logs.sh appliance/build.sh appliance/test-boot.sh
 
       - name: Compose file (with and without the web UI, and with IPv6 DNS)
         run: |

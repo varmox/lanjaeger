@@ -1,0 +1,15 @@
+[Unit]
+Description=lanjaeger: apply deployment options (hostname, network, time, SSH, cache disk)
+DefaultDependencies=no
+After=local-fs.target systemd-tmpfiles-setup.service
+Before=systemd-networkd.service network-pre.target sshd.service docker.service
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/lanjaeger-setup early
+RemainAfterExit=yes
+StandardOutput=journal+console
+
+[Install]
+WantedBy=multi-user.target
